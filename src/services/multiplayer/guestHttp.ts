@@ -1,0 +1,512 @@
+/**
+ * HTTP- und WebSocket-Bausteine für Browser-Gäste.
+ * Der Host spricht weiter das NDJSON-Protokoll. Der Browser bekommt dieselben Rahmen als WebSocket-Text.
+ */
+import { createHash } from 'crypto';
+import { scriptJson } from '../../bridge/scriptJson';
+import { sameSecret } from './guard';
+
+const WS_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
+
+export function encodeWifiQr(ssid: string, password: string): string {
+  const name = String(ssid ?? '');
+  if (!name) return '';
+  const esc = (value: string) => value.replace(/([\\;,:"])/g, '\\$1');
+  const secret = String(password ?? '');
+  if (!secret) return `WIFI:T:nopass;S:${esc(name)};;`;
+  return `WIFI:T:WPA;S:${esc(name)};P:${esc(secret)};;`;
+}
+
+export function gameUrl(ip: string, port: number, token: string): string {
+  return `http://${ip}:${port}/g/${token}/`;
+}
+
+export function guestBootTags(token: string, appId: string, room: string): string {
+  const payload = scriptJson({ appId, room });
+  return `<base href="/g/${token}/"><script>window.__OPEN_SCR_GUEST__=${payload};</script><script src="openscr-guest.js"></script>`;
+}
+
+export function injectGuestDocument(html: string, token: string, appId: string, room: string): string {
+  const tags = guestBootTags(token, appId, room);
+  if (/<head[^>]*>/i.test(html)) return html.replace(/<head[^>]*>/i, (match) => match + tags);
+  return `<!DOCTYPE html><html><head>${tags}</head><body>${html}</body></html>`;
+}
+
+export interface GuestTarget {
+  ok: true;
+  rel: string;
+  websocket: boolean;
+}
+
+export function resolveGuestPath(urlPath: string, token: string): GuestTarget | { ok: false; status: number; message: string } {
+  const cut = urlPath.indexOf('?');
+  const path = cut === -1 ? urlPath : urlPath.slice(0, cut);
+  let decoded = path;
+  try {
+    decoded = decodeURIComponent(path);
+  } catch {
+    return { ok: false, status: 400, message: 'Pfad ungültig.' };
+  }
+  if (decoded.includes('\\') || decoded.includes('\0')) return { ok: false, status: 403, message: 'Pfad abgelehnt.' };
+  const parts = decoded.split('/');
+  if (parts[0] !== '' || parts[1] !== 'g' || !parts[2]) return { ok: false, status: 404, message: 'Nicht gefunden.' };
+  if (!sameSecret(parts[2], token)) return { ok: false, status: 404, message: 'Nicht gefunden.' };
+  const rest = parts.slice(3).join('/');
+  if (!rest || rest === 'index.html') return { ok: true, rel: '', websocket: false };
+  if (rest === 'ws') return { ok: true, rel: 'ws', websocket: true };
+  if (rest.split('/').some((part) => part === '..' || part === '.')) return { ok: false, status: 403, message: 'Pfad abgelehnt.' };
+  return { ok: true, rel: rest, websocket: false };
+}
+
+export interface HttpHead {
+  method: string;
+  target: string;
+  headers: Record<string, string>;
+  rest: Uint8Array;
+}
+
+export function parseHttpHead(buffer: Uint8Array): HttpHead | null | { error: string } {
+  const marker = findDoubleCrlf(buffer);
+  if (marker < 0) {
+    if (buffer.length > 16 * 1024) return { error: 'Kopf zu groß.' };
+    return null;
+  }
+  const head = utf8Slice(buffer.subarray(0, marker));
+  const lines = head.split('\r\n');
+  const request = lines.shift() || '';
+  const match = /^([A-Z]+) (\S+) HTTP\/1\.[01]$/.exec(request);
+  if (!match) return { error: 'Keine HTTP-Anfrage.' };
+  const headers: Record<string, string> = {};
+  for (const line of lines) {
+    const colon = line.indexOf(':');
+    if (colon <= 0) continue;
+    headers[line.slice(0, colon).trim().toLowerCase()] = line.slice(colon + 1).trim();
+  }
+  return { method: match[1], target: match[2], headers, rest: buffer.slice(marker + 4) };
+}
+
+export function wsAcceptKey(clientKey: string): string {
+  return createHash('sha1').update(`${clientKey}${WS_GUID}`).digest('base64');
+}
+
+export function httpBytes(status: number, reason: string, headers: Record<string, string>, body: Uint8Array): Uint8Array {
+  const lines = [`HTTP/1.1 ${status} ${reason}`];
+  const all: Record<string, string> = {
+    'content-length': String(body.length),
+    connection: 'close',
+    'cache-control': 'no-store',
+    ...headers,
+  };
+  Object.keys(all).forEach((key) => lines.push(`${key}: ${all[key]}`));
+  const head = utf8Encode(`${lines.join('\r\n')}\r\n\r\n`);
+  const out = new Uint8Array(head.length + body.length);
+  out.set(head, 0);
+  out.set(body, head.length);
+  return out;
+}
+
+export function upgradeResponse(clientKey: string): Uint8Array {
+  return httpBytes(101, 'Switching Protocols', {
+    upgrade: 'websocket',
+    connection: 'Upgrade',
+    'sec-websocket-accept': wsAcceptKey(clientKey),
+  }, new Uint8Array());
+}
+
+export interface WsFrame {
+  opcode: number;
+  payload: Uint8Array;
+}
+
+export function encodeWsFrame(opcode: number, payload: Uint8Array): Uint8Array {
+  const len = payload.length;
+  let header: number;
+  if (len < 126) header = 2;
+  else if (len < 65536) header = 4;
+  else header = 10;
+  const out = new Uint8Array(header + len);
+  out[0] = 0x80 | (opcode & 0x0f);
+  if (len < 126) out[1] = len;
+  else if (len < 65536) {
+    out[1] = 126;
+    out[2] = (len >> 8) & 0xff;
+    out[3] = len & 0xff;
+  } else {
+    out[1] = 127;
+    const view = new DataView(out.buffer);
+    view.setUint32(2, Math.floor(len / 0x100000000));
+    view.setUint32(6, len >>> 0);
+  }
+  out.set(payload, header);
+  return out;
+}
+
+export function decodeWsFrames(buffer: Uint8Array): { frames: WsFrame[]; rest: Uint8Array; error?: string } {
+  const frames: WsFrame[] = [];
+  let offset = 0;
+  while (offset + 2 <= buffer.length) {
+    const b0 = buffer[offset];
+    const b1 = buffer[offset + 1];
+    const opcode = b0 & 0x0f;
+    const masked = (b1 & 0x80) !== 0;
+    let length = b1 & 0x7f;
+    let cursor = offset + 2;
+    if (length === 126) {
+      if (cursor + 2 > buffer.length) return { frames, rest: buffer.slice(offset) };
+      length = (buffer[cursor] << 8) | buffer[cursor + 1];
+      cursor += 2;
+    } else if (length === 127) {
+      if (cursor + 8 > buffer.length) return { frames, rest: buffer.slice(offset) };
+      const hi = (buffer[cursor] * 0x1000000) + (buffer[cursor + 1] << 16) + (buffer[cursor + 2] << 8) + buffer[cursor + 3];
+      if (hi !== 0) return { frames, rest: new Uint8Array(), error: 'Rahmen zu groß.' };
+      length = ((buffer[cursor + 4] * 0x1000000) + (buffer[cursor + 5] << 16) + (buffer[cursor + 6] << 8) + buffer[cursor + 7]) >>> 0;
+      cursor += 8;
+    }
+    if (length > 64 * 1024) return { frames, rest: new Uint8Array(), error: 'Rahmen zu groß.' };
+    const maskLen = masked ? 4 : 0;
+    if (cursor + maskLen + length > buffer.length) return { frames, rest: buffer.slice(offset) };
+    const payload = buffer.subarray(cursor + maskLen, cursor + maskLen + length);
+    const data = new Uint8Array(payload.length);
+    if (masked) {
+      const mask = buffer.subarray(cursor, cursor + 4);
+      for (let i = 0; i < payload.length; i++) data[i] = payload[i] ^ mask[i % 4];
+    } else data.set(payload);
+    frames.push({ opcode, payload: data });
+    offset = cursor + maskLen + length;
+    if (frames.length > 32) return { frames, rest: new Uint8Array(), error: 'Zu viele Rahmen.' };
+  }
+  return { frames, rest: buffer.slice(offset) };
+}
+
+export function concatBytes(left: Uint8Array, right: Uint8Array): Uint8Array {
+  const out = new Uint8Array(left.length + right.length);
+  out.set(left, 0);
+  out.set(right, left.length);
+  return out;
+}
+
+export function utf8Encode(value: string): Uint8Array {
+  return new TextEncoder().encode(value);
+}
+
+export function utf8Slice(bytes: Uint8Array): string {
+  return new TextDecoder().decode(bytes);
+}
+
+function findDoubleCrlf(buffer: Uint8Array): number {
+  for (let i = 0; i + 3 < buffer.length; i++) {
+    if (buffer[i] === 13 && buffer[i + 1] === 10 && buffer[i + 2] === 13 && buffer[i + 3] === 10) return i;
+  }
+  return -1;
+}
+
+/** Gast-Brücke. Dieselbe Multiplayer-API, ohne native Gerätefunktionen. */
+export const GUEST_SHIM_SOURCE = `(function () {
+  var cfg = window.__OPEN_SCR_GUEST__ || {};
+  var match = String(location.pathname || '').match(/\\/g\\/([0-9a-fA-F]+)/);
+  var token = match ? match[1] : '';
+  var storageKey = 'openscr-guest:' + token;
+  var listeners = {};
+  var socket = null;
+  var welcomed = false;
+  var selfId = '';
+  var secret = '';
+  var roomCode = String(cfg.room || '');
+  var appId = String(cfg.appId || '');
+  var players = [];
+  var name = '';
+  var outbox = [];
+  var resumeWaiters = [];
+  var joinWaiters = [];
+  var reconnectTimer = null;
+  var attempt = 0;
+  var giveUp = false;
+  var resumeTimer = null;
+  var pendingResume = null;
+
+  function emit(event, data) {
+    (listeners[event] || []).slice().forEach(function (cb) {
+      try { cb(data); } catch (err) {}
+    });
+  }
+  function on(event, cb) {
+    if (!listeners[event]) listeners[event] = [];
+    listeners[event].push(cb);
+    return function () { off(event, cb); };
+  }
+  function off(event, cb) {
+    listeners[event] = (listeners[event] || []).filter(function (item) { return item !== cb; });
+  }
+  function readIdentity() {
+    try {
+      var raw = localStorage.getItem(storageKey);
+      return raw ? JSON.parse(raw) : null;
+    } catch (err) { return null; }
+  }
+  function writeIdentity() {
+    try {
+      localStorage.setItem(storageKey, JSON.stringify({ playerId: selfId, secret: secret, name: name, roomCode: roomCode }));
+    } catch (err) {}
+  }
+  function clearIdentity() {
+    try { localStorage.removeItem(storageKey); } catch (err) {}
+    selfId = '';
+    secret = '';
+  }
+  function view(status) {
+    return { role: 'guest', roomCode: roomCode, selfId: selfId, players: players, status: status };
+  }
+  function settleJoin(value, error) {
+    var waiters = joinWaiters;
+    joinWaiters = [];
+    waiters.forEach(function (waiter) { error ? waiter.reject(error) : waiter.resolve(value); });
+  }
+  function settleResume(value) {
+    var waiters = resumeWaiters;
+    resumeWaiters = [];
+    waiters.forEach(function (waiter) { waiter(value); });
+  }
+  function scheduleResumed(info) {
+    pendingResume = info;
+    if (resumeTimer) clearTimeout(resumeTimer);
+    resumeTimer = setTimeout(function () {
+      resumeTimer = null;
+      var payload = pendingResume;
+      pendingResume = null;
+      if (!payload) return;
+      emit('multiplayer.resumed', payload);
+      settleResume(payload);
+    }, 40);
+  }
+  function wsUrl() {
+    var base = document.querySelector('base');
+    var href = base && base.href ? base.href : location.href;
+    if (href.slice(-1) !== '/') href += '/';
+    return href.replace(/^http/i, 'ws') + 'ws';
+  }
+  function socketSend(text) {
+    if (socket && socket.readyState === 1) socket.send(text);
+  }
+  function flushOutbox() {
+    if (!welcomed) return;
+    while (outbox.length) socketSend(outbox.shift());
+  }
+  function sendRaw(frame) {
+    var text = JSON.stringify(frame);
+    if (frame.t !== 'hello' && !welcomed) { outbox.push(text); return; }
+    if (socket && socket.readyState === 1) socketSend(text);
+    else if (frame.t !== 'hello') outbox.push(text);
+  }
+  function helloFrame() {
+    var saved = readIdentity();
+    var hello = { t: 'hello', v: 1, appId: appId, room: roomCode, token: token, name: name || (saved && saved.name) || 'Gast' };
+    if (saved && saved.secret && saved.playerId) {
+      hello.playerId = saved.playerId;
+      hello.secret = saved.secret;
+      if (!name) name = saved.name || hello.name;
+      hello.name = name;
+    }
+    return hello;
+  }
+  function handleFrame(frame) {
+    if (!frame || typeof frame !== 'object') return;
+    if (frame.t === 'welcome') {
+      welcomed = true;
+      attempt = 0;
+      selfId = frame.playerId || selfId;
+      secret = frame.secret || secret;
+      players = frame.players || [];
+      writeIdentity();
+      hideName();
+      emit('multiplayer.players', { players: players, selfId: selfId, roomCode: roomCode });
+      settleJoin({ roomCode: roomCode, qrPayload: '', gameUrl: '', playerId: selfId, players: players });
+      flushOutbox();
+      scheduleResumed(view('ready'));
+      return;
+    }
+    if (frame.t === 'players') {
+      players = frame.players || [];
+      emit('multiplayer.players', { players: players, selfId: selfId, roomCode: roomCode });
+      return;
+    }
+    if (frame.t === 'msg') {
+      emit('multiplayer.message', { from: frame.from, data: frame.data });
+      return;
+    }
+    if (frame.t === 'ping') {
+      sendRaw({ t: 'pong', ts: frame.ts });
+      return;
+    }
+    if (frame.t === 'error') {
+      var fatal = frame.code === 'auth' || frame.code === 'ended' || frame.code === 'denied' || frame.code === 'full' || frame.code === 'player';
+      if (fatal) {
+        giveUp = true;
+        if (frame.code === 'ended' || frame.code === 'auth') clearIdentity();
+      }
+      settleJoin(null, new Error(frame.message || 'Verbindung abgelehnt.'));
+      if (!welcomed) settleResume(null);
+    }
+  }
+  function connect() {
+    if (giveUp || !token || !appId) return;
+    if (socket && (socket.readyState === 0 || socket.readyState === 1)) return;
+    var hello = helloFrame();
+    var ws;
+    try { ws = new WebSocket(wsUrl()); }
+    catch (err) { scheduleReconnect(); return; }
+    socket = ws;
+    welcomed = false;
+    ws.onopen = function () { ws.send(JSON.stringify(hello)); };
+    ws.onmessage = function (ev) {
+      var frame;
+      try { frame = JSON.parse(String(ev.data)); } catch (err) { return; }
+      handleFrame(frame);
+    };
+    ws.onclose = function () {
+      if (socket !== ws) return;
+      socket = null;
+      if (giveUp) return;
+      if (selfId) {
+        emit('multiplayer.hostAway', { roomCode: roomCode, message: 'Host ist kurz weg' });
+        settleResume(view('hostAway'));
+      }
+      scheduleReconnect();
+    };
+  }
+  function scheduleReconnect() {
+    if (giveUp || reconnectTimer) return;
+    var wait = Math.min(15000, 400 * Math.pow(2, Math.min(attempt, 6)));
+    attempt += 1;
+    reconnectTimer = setTimeout(function () {
+      reconnectTimer = null;
+      connect();
+    }, wait);
+  }
+  function unavailable() {
+    return Promise.reject(new Error('Im Browser-Gast nicht verfügbar.'));
+  }
+  function guestOnly() {
+    return Promise.reject(new Error('Im Browser ist nur die Gast-Ansicht da.'));
+  }
+  function stub() {
+    function fn() { return unavailable(); }
+    return new Proxy(fn, { get: function () { return stub(); } });
+  }
+  function hideName() {
+    var box = document.getElementById('openscr-guest-name');
+    if (box && box.parentNode) box.parentNode.removeChild(box);
+  }
+  function showName() {
+    if (document.getElementById('openscr-guest-name')) return;
+    var box = document.createElement('form');
+    box.id = 'openscr-guest-name';
+    box.setAttribute('style', 'position:fixed;left:12px;right:12px;bottom:12px;z-index:99999;background:#0f1115;color:#fff;padding:12px;border-radius:12px;font:16px sans-serif');
+    var label = document.createElement('div');
+    label.textContent = 'Dein Name im Spiel';
+    var input = document.createElement('input');
+    input.maxLength = 24;
+    input.value = name || 'Gast';
+    input.setAttribute('style', 'display:block;width:100%;margin:8px 0;padding:8px;box-sizing:border-box;font:inherit');
+    var button = document.createElement('button');
+    button.type = 'submit';
+    button.textContent = 'Mitspielen';
+    button.setAttribute('style', 'font:inherit;padding:10px 14px;border:0;border-radius:10px;background:#2f6fed;color:#fff');
+    box.appendChild(label);
+    box.appendChild(input);
+    box.appendChild(button);
+    box.onsubmit = function (ev) {
+      ev.preventDefault();
+      name = String(input.value || 'Gast').slice(0, 24);
+      connect();
+    };
+    (document.body || document.documentElement).appendChild(box);
+  }
+  function begin(nextName) {
+    if (nextName) name = String(nextName).slice(0, 24);
+    if (welcomed && socket && socket.readyState === 1) {
+      return Promise.resolve({ roomCode: roomCode, qrPayload: '', gameUrl: '', playerId: selfId, players: players });
+    }
+    connect();
+    return new Promise(function (resolve, reject) { joinWaiters.push({ resolve: resolve, reject: reject }); });
+  }
+  var mp = {
+    host: function () { return guestOnly(); },
+    join: function (input) {
+      var next = input && typeof input === 'object' ? input.name : '';
+      return begin(next);
+    },
+    send: function (data, opts) {
+      sendRaw({ t: 'msg', to: opts && opts.to ? opts.to : undefined, data: data });
+      return Promise.resolve({ seq: 0 });
+    },
+    broadcast: function (data) {
+      sendRaw({ t: 'msg', all: true, data: data });
+      return Promise.resolve({ seq: 0 });
+    },
+    leave: function () {
+      sendRaw({ t: 'leave' });
+      giveUp = true;
+      clearIdentity();
+      if (socket) socket.close();
+      return Promise.resolve({ left: true });
+    },
+    showQr: function () { return guestOnly(); },
+    discover: function () { return guestOnly(); },
+    stopDiscovery: function () { return guestOnly(); },
+    setDiscoverable: function () { return guestOnly(); },
+    approveJoin: function () { return guestOnly(); },
+    denyJoin: function () { return guestOnly(); },
+    endRoom: function () { return guestOnly(); },
+    resume: function () {
+      var saved = readIdentity();
+      if (saved && saved.name && !name) name = saved.name;
+      if (welcomed && socket && socket.readyState === 1) return Promise.resolve(view('ready'));
+      connect();
+      return new Promise(function (resolve) { resumeWaiters.push(resolve); });
+    },
+    onMessage: function (cb) { return on('multiplayer.message', cb); },
+    onPlayersChanged: function (cb) { return on('multiplayer.players', cb); },
+    onJoinRequest: function (cb) { return on('multiplayer.joinRequest', cb); },
+    onResumed: function (cb) { return on('multiplayer.resumed', cb); },
+    onHostAway: function (cb) { return on('multiplayer.hostAway', cb); },
+  };
+  var bridge = {
+    guest: true,
+    buildInfo: { environment: 'browser-guest', buildType: 'browser' },
+    multiplayer: mp,
+    events: { on: on, off: off },
+    storage: stub(),
+    secrets: stub(),
+    http: stub(),
+    bluetooth: stub(),
+    notifications: stub(),
+    camera: stub(),
+    sensors: stub(),
+    vibration: stub(),
+    background: stub(),
+    ble: stub(),
+    net: stub(),
+    popup: stub(),
+    tiles: stub(),
+    spotify: stub(),
+    clipboard: stub(),
+    network: stub(),
+    media: stub(),
+    crypto: stub(),
+    screen: stub(),
+  };
+  window.OpenScrBridge = bridge;
+  window.EveryAppBridge = bridge;
+  var savedNow = readIdentity();
+  if (savedNow && savedNow.secret && savedNow.playerId) {
+    name = savedNow.name || 'Gast';
+    connect();
+  } else {
+    setTimeout(function () {
+      if (name || welcomed) return;
+      if (document.body) showName();
+      else document.addEventListener('DOMContentLoaded', showName);
+    }, 300);
+  }
+})();
+`;

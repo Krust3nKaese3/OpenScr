@@ -1,9 +1,10 @@
 /**
  * Every native capability needs a per-mini-app decision.
  * `events` is only the subscription channel; each event name has its own permission.
- * FREE_CATEGORIES stays empty so older call sites keep compiling.
+ * `screen` hält nur die Anzeige wach und ist ohne Extra-Zustimmung erlaubt.
+ * Andere Kategorien bleiben zustimmungspflichtig.
  */
-export const FREE_CATEGORIES: string[] = [];
+export const FREE_CATEGORIES: string[] = ['screen'];
 
 export type PermissionChoice = 'allow' | 'ask' | 'deny';
 

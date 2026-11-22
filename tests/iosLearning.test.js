@@ -123,6 +123,7 @@ test('iOS bridge allows the learning set and rejects sockets, macros, tiles and 
     assert.ok(message.includes('nicht verfügbar'));
     assert.strictEqual(assessBridgeCall('android', method), null, method);
   }
+  assert.strictEqual(assessBridgeCall('ios', 'screen.keepAwake'), null);
   assert.strictEqual(iosBlockedCapability('ios', 'events'), null);
   assert.strictEqual(iosBlockedCapability('ios', 'background'), IOS_CAPABILITY_ERROR);
   const offered = permissionsOfferedOnPlatform('ios', ['storage', 'net', 'background', 'ble', 'popup', 'vibration']);

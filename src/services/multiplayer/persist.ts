@@ -21,6 +21,11 @@ export interface StoredRoom {
   port: number;
   members: RoomMemberSeed[];
   roster?: PlayerView[];
+  /** Letzter broadcast des Hosts. Browser-Gäste bekommen ihn nach dem Neuverbinden. */
+  snapshot?: unknown;
+  snapshotSeq?: number;
+  /** Port des Browser-Servers. Nach einem Neustart wird derselbe Port versucht. */
+  guestPort?: number;
   updatedAt: number;
 }
 

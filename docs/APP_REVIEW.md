@@ -41,7 +41,7 @@ Die OpenScrapp erreicht das Gerät nur über die Allowlist. Auf iOS sind das:
 
 Jede dieser Kategorien braucht eine einmalige Zustimmung, außer dem Event-Kanal. Dateisystem, Kontakte und Standort gibt es nicht.
 
-Auf iOS nicht verfügbar, auch nicht durch eine ferne Datei: Roh-TCP, Roh-UDP, Tuya, Hintergrundaufgaben, Makros, Kacheln, Popups, klassisches Bluetooth, Benachrichtigungen, Kamera, Spotify, Medientasten, WLAN-Info, Zwischenablage, Geheimnisse, Kryptografie und Mehrspieler. Der Aufruf antwortet auf Deutsch: „Diese Funktion ist auf iOS nicht verfügbar. Erlaubt sind Speicher, Sensoren, HTTP, Bluetooth LE und Vibration.“
+Auf iOS nicht verfügbar, auch nicht durch eine ferne Datei: Roh-TCP, Roh-UDP, Tuya, Hintergrundaufgaben, Makros, Kacheln, Popups, klassisches Bluetooth, Benachrichtigungen, Kamera, Spotify, Medientasten, WLAN-Info, Zwischenablage, Geheimnisse, Kryptografie und Mehrspieler. Der Aufruf antwortet auf Deutsch: „Diese Funktion ist auf iOS nicht verfügbar. Erlaubt sind Speicher, Sensoren, HTTP, Bluetooth LE, Vibration und Bildschirm wachhalten.“
 
 Die Android-App ist ein anderes Programm: Katalog, freie öffentliche Repositories nach Warnung, und die längere Bridge. Diese Notiz beschreibt die iOS-App.
 

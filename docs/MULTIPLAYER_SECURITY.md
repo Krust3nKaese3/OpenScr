@@ -26,4 +26,6 @@ Bewertung: hoch, mittel, niedrig. „Behoben“ heißt, der beschriebene Angriff
 
 Die OpenScrapp sieht das Wiederverbindungs-Geheimnis nicht. Sie merkt nur `connected` und dieselbe `playerId`. Ein abgelaufener oder beendeter Raum wird aus dem app-eigenen Speicher gelöscht. Die Suche braucht unter Android keine Standort-Berechtigung. Die Multicast-Sperre liegt nur an, solange angekündigt oder gesucht wird.
 
+Der Browser-Server ist HTTP ohne TLS auf demselben privaten Netz. Die Spiel-Adresse enthält das Token. Wer sie hat, lädt die Dateien dieser OpenScrapp und tritt bei. Ein falsches Token bekommt dieselbe knappe Antwort wie ein unbekannter Pfad. Pfade mit `..` werden abgelehnt. Der letzte `broadcast` des Hosts liegt zusätzlich im app-eigenen Speicher, damit ein Browser-Gast ihn nach einem Neustart wieder bekommt. Das WLAN-Passwort für den Beitrittscode liegt nur dann auf dem Gerät, wenn der Host das Merken auswählt, und nie im Raumdatensatz mit Token und Spielergeheimnis.
+
 Geprüft ohne nativen Build. Die Socket-Schicht und die Ankündigung sind mit einer Ersatzverbindung getestet, nicht auf einem Gerät. Das Modul `expo-mdns` ist nicht kompiliert worden.

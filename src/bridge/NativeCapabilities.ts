@@ -62,6 +62,7 @@ import {
 import { nativeDiscoveryPort } from '../services/multiplayer/mdnsPort';
 import { roomStore } from '../services/multiplayer/secureRoomStore';
 import { setHostKeepAlive } from '../services/multiplayer/hostKeepAlive';
+import { setKeepAwake } from '../services/keepAwake';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -461,6 +462,14 @@ export class NativeCapabilities {
     denyJoin: (id: string) => denyJoin(this.appId, id),
     endRoom: () => endRoom(this.appId),
     resume: () => resumeMultiplayer(this.appId, (event, data) => this.eventEmitter.emit(event, data)),
+  };
+
+  screen = {
+    keepAwake: async (on: boolean): Promise<{ on: boolean }> => {
+      const active = on !== false;
+      await setKeepAwake(`scrapp:${this.appId}`, active);
+      return { on: active };
+    },
   };
 
   events = {

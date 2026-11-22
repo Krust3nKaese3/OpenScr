@@ -15,7 +15,8 @@ import { setupGlobalErrorHandler, removeGlobalErrorHandler } from '../utils/erro
 import { MultiplayerOverlay } from './MultiplayerOverlay';
 import { SourceCodeModal } from './SourceCodeModal';
 import { learningPaneHeights, permissionsOfferedOnPlatform, showsLearningChrome } from '../services/iosPolicy';
-import { cancelMpScan, detachMultiplayer, dismissMpUi, endRoom, submitMpScan, subscribeMpUi, approveJoin, denyJoin, resumeMultiplayer, type MpUiState } from '../services/multiplayer/session';
+import { cancelMpScan, detachMultiplayer, dismissMpUi, endRoom, submitMpScan, subscribeMpUi, subscribeHostPresence, approveJoin, denyJoin, resumeMultiplayer, showMultiplayerQr, type HostPresence, type MpUiState } from '../services/multiplayer/session';
+import { setGuestContent } from '../services/multiplayer/guestContent';
 import {
   assetRuntimeSource,
   assetUri,
@@ -43,6 +44,7 @@ export const MiniAppRunner: React.FC<MiniAppRunnerProps> = ({ app, onClose }) =>
   const [runtimeConsent, setRuntimeConsent] = useState<Permission[] | null>(null);
   const [grantedPermissions, setGrantedPermissions] = useState<Permission[]>([]);
   const [mpUi, setMpUi] = useState<MpUiState | null>(null);
+  const [hostPresence, setHostPresence] = useState<HostPresence | null>(null);
   const grantedRef = useRef<Permission[]>([]);
   const deniedRef = useRef<Permission[]>([]);
   const consentChain = useRef<Promise<unknown>>(Promise.resolve());
@@ -96,6 +98,22 @@ export const MiniAppRunner: React.FC<MiniAppRunnerProps> = ({ app, onClose }) =>
   }, []);
 
   useEffect(() => subscribeMpUi(setMpUi), []);
+  useEffect(() => subscribeHostPresence(setHostPresence), []);
+  useEffect(() => {
+    if (Platform.OS !== 'android') return undefined;
+    let entry = 'index.html';
+    try { entry = normalizeEntrypoint(app.manifest.entrypoint); } catch { entry = 'index.html'; }
+    setGuestContent(app.id, {
+      entry,
+      read: async (rel) => {
+        const file = await readMiniAppAsset(app.localPath, rel || entry);
+        if (!file) return null;
+        const body = file.text != null ? new TextEncoder().encode(file.text) : decodeBase64(file.base64);
+        return { mime: file.mime, body };
+      },
+    });
+    return undefined;
+  }, [app.id, app.localPath, app.manifest.entrypoint]);
 
   const declaredPermissions = () => (app.manifest.permissions || []).filter(isPermission);
 
@@ -426,6 +444,14 @@ export const MiniAppRunner: React.FC<MiniAppRunnerProps> = ({ app, onClose }) =>
         <Text style={{ color: 'white', fontSize: 18, fontWeight: '700' }}>✕</Text>
       </TouchableOpacity>
       )}
+      {Platform.OS === 'android' && hostPresence && !mpUi ? (
+        <TouchableOpacity
+          onPress={() => { try { showMultiplayerQr(app.id); } catch { /* Der Raum ist schon zu. */ } }}
+          style={{ position: 'absolute', left: 12, bottom: 16, borderRadius: 16, backgroundColor: 'rgba(15,17,21,0.82)', paddingVertical: 8, paddingHorizontal: 12, zIndex: 12 }}
+        >
+          <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>{hostPresence.batteryWarning ? 'Einladen · Akku' : 'Einladen'}</Text>
+        </TouchableOpacity>
+      ) : null}
       </View>
 
       <PermissionRequestModal
@@ -448,7 +474,7 @@ export const MiniAppRunner: React.FC<MiniAppRunnerProps> = ({ app, onClose }) =>
       />
       {learning ? (
         <SourceCodeModal app={app} visible={showSource} onClose={() => setShowSource(false)} />
-      ) : (
+      ) : Platform.OS !== 'android' ? null : (
       <MultiplayerOverlay
         state={mpUi}
         onDone={dismissMpUi}
@@ -462,6 +488,11 @@ export const MiniAppRunner: React.FC<MiniAppRunnerProps> = ({ app, onClose }) =>
     </View>
   );
 };
+
+function decodeBase64(value: string): Uint8Array {
+  const buf = Buffer.from(value, 'base64');
+  return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
+}
 
 async function readMiniAppAsset(localPath: string, rel: string): Promise<{ mime: string; base64: string; text: string | null } | null> {
   const uri = assetUri(localPath, rel);

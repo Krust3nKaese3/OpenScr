@@ -110,7 +110,8 @@ WLAN-Adressen (`wlan0`, `en0`) haben Vorrang. Ein Hotspot ohne WLAN-Client (typi
 - Der Host hört auf TCP (`react-native-tcp-socket`), Port wird vom System vergeben. Nach einem Neustart darf der Port neu sein. Die Raum-Id bleibt.
 - Etwa alle 3 Sekunden ein Ping. Antwortet jemand 10 Sekunden nicht, gilt die Verbindung als weg. Der Platz bleibt.
 - Der Platz bleibt reserviert, bis der Gast `leave()` ruft oder der Host `endRoom()` aufruft. Dafür gibt der Host nur diesem Spieler ein Geheimnis. Die OpenScrapp sieht es nicht. Es liegt im app-eigenen Speicher (Secure Store, wenn das Modul da ist).
-- Schließt man die OpenScrapp oder OpenScr, endet der Raum nicht. Android hält den Host im Hintergrund über den vorhandenen Vordergrunddienst, mit der sichtbaren Zeile „Spielraum“, solange der Raum läuft. iOS hält den Host nicht im Hintergrund. Beim nächsten Öffnen startet der Raum neu und meldet dieselbe Raum-Id.
+- Schließt man die OpenScrapp oder OpenScr, endet der Raum nicht. Android hält den Host im Hintergrund über den vorhandenen Vordergrunddienst, mit der sichtbaren Zeile „Spielraum, Browser-Gäste“, solange der Raum läuft. Der HTTP-Server für den Browser hängt an demselben Prozess. Android kann ihn trotzdem beenden. iOS hält den Host nicht im Hintergrund. Beim nächsten Öffnen startet der Raum neu, versucht denselben Browser-Port und meldet dieselbe Raum-Id.
+- Während der Host-Raum läuft, hält OpenScr den Bildschirm wach. Sinkt der Akku auf 20 % oder weniger und das Gerät lädt nicht, sieht der Host „Akku niedrig“.
 - Solange der Host weg ist, bekommen Gäste `multiplayer.hostAway` („Host ist kurz weg“) und versuchen es mit wachsendem Abstand weiter. Zuerst die gespeicherte Adresse, danach die Suche nach der Raum-Id, weil sich die IP ändern kann.
 - `multiplayer.resume()` und das Event `multiplayer.resumed` liefern `{ role, roomCode, selfId, players, status }`. Den Spielstand muss die OpenScrapp selbst aus `OpenScrBridge.storage` holen. Der Host schickt ihn den Gästen danach.
 - Ein gespeicherter Raum ohne Aktivität verschwindet nach 24 Stunden.
@@ -119,13 +120,80 @@ WLAN-Adressen (`wlan0`, `en0`) haben Vorrang. Ein Hotspot ohne WLAN-Client (typi
 
 Spieler, die kurz weg sind, bleiben in `onPlayersChanged` mit `connected: false`.
 
+## Browser-Gäste
+
+Ein Gast ohne OpenScr scannt zwei QR-Codes und spielt im normalen Browser des Handys. Das gibt es nur auf Android. Auf iOS bietet die Bridge `multiplayer` nicht an, und OpenScr zeigt die Einladung nicht (`Platform.OS === 'android'`).
+
+Der Host-Bildschirm fragt zuerst **WLAN** oder **Hotspot**.
+
+- **WLAN:** OpenScr zeigt den Netznamen, soweit Android ihn herausgibt. Sonst tippt der Host ihn ein. Das Passwort tippt er einmal. Ein Häkchen merkt es nur auf diesem Gerät. Danach gibt es einen WLAN-Code `WIFI:T:WPA;S:<name>;P:<passwort>;;` und einen Spiel-Code `http://<ip>:<port>/g/<token>/`.
+- **Hotspot:** Ein Knopf startet auf Android einen `LocalOnlyHotspot`, wenn das Gerät die Zugangsdaten herausgibt. Dann entstehen beide Codes von selbst. Gibt Android SSID oder Passwort nicht heraus, oder der Start scheitert, öffnet OpenScr die Systemeinstellungen für den Hotspot und der Host trägt beides ein.
+
+Die Codes bleiben erreichbar, auch mitten im Spiel: OpenScr blendet einen kleinen Knopf **Einladen** ein. Der kommt von OpenScr, nicht von der OpenScrapp.
+
+Der Spiel-Code liefert die Dateien der geöffneten OpenScrapp und ein kleines Skript `openscr-guest.js`. Das Skript setzt `window.OpenScrBridge` und `window.EveryAppBridge`. `OpenScrBridge.guest` ist `true`. Die Mehrspieler-Methoden des Gasts sind dieselben wie in der App und laufen über WebSocket:
+
+`join`, `send`, `broadcast`, `leave`, `resume`, `onMessage`, `onPlayersChanged`, `onResumed`, `onHostAway`.
+
+`host`, `discover`, `showQr`, `approveJoin`, `denyJoin`, `endRoom` und `setDiscoverable` lehnen im Browser ab: „Im Browser ist nur die Gast-Ansicht da.“
+
+### Was eine OpenScrapp dafür tun muss
+
+Dieselbe Seite läuft in der WebView des Hosts und im Browser der Gäste. Der Browser ist immer Gast.
+
+```javascript
+const bridge = window.OpenScrBridge;
+const mp = bridge.multiplayer;
+
+mp.onMessage((message) => {
+  // Voller Spielstand ersetzt den lokalen Stand. message.data kommt vom Host.
+});
+mp.onPlayersChanged((roster) => {});
+mp.onResumed((info) => {});
+mp.onHostAway((info) => {});
+
+if (bridge.guest === true) {
+  const back = await mp.resume();
+  if (!back || back.status === 'hostAway') {
+    // resume verbindet mit der gespeicherten Identität von selbst neu.
+    // Ohne gespeicherten Namen: join, oder das Namensfeld der Gastseite.
+  }
+  if (!back || !back.selfId) await mp.join({ name: 'Bea' });
+} else {
+  const back = await mp.resume();
+  if (!back) await mp.host({ name: 'Ada' });
+}
+```
+
+Callbacks vor `resume`, `join` oder `host` anmelden. Der Host schickt den für Gäste sichtbaren Stand mit `broadcast`, sobald er sich ändert. OpenScr merkt sich diesen letzten `broadcast` und schickt ihn einem Browser-Gast nach dem Willkommen erneut, also nach einem Reload, nach einem Verbindungsabbruch und nach einem Neustart von OpenScr. Eine einzelne `send`-Nachricht an eine Person wird nicht wiederholt. Die OpenScrapp soll den Stand ersetzen, nicht anstückeln. `storage` gibt es im Browser nicht. Den Stand gibt es nur aus `onMessage`.
+
+Die Identität liegt im `localStorage` des Browsers (`playerId`, Geheimnis, Name, Raumcode). Dieselbe Person belegt nach dem Neuladen denselben Platz. Ein App-Gast nutzt weiter sein gespeichertes Geheimnis in OpenScr. Daran ändert der Browser-Weg nichts.
+
+`OpenScrBridge.guest` ist in der App `undefined`. Nur die ausgelieferte Gastseite setzt es.
+
+### Im Browser nicht da
+
+Diese Aufrufe antworten mit „Im Browser-Gast nicht verfügbar.“:
+
+- Speicher und Geheimnisse (`storage`, `secrets`)
+- Spotify, Medientasten, Bluetooth, BLE
+- Kamera, Sensoren, Vibration, Benachrichtigungen
+- Hintergrund, Kacheln, Popups
+- Netzinfo, Roh-Sockets, HTTP über die Bridge, Kryptografie, Zwischenablage
+- Bildschirm wachhalten (`screen.keepAwake`)
+
+Der Gast-Browser hat seine eigene `fetch`-Funktion. Die Bridge-Methode `http` ist es nicht. Der WebSocket zum Host bleibt offen und verbindet sich mit wachsendem Abstand neu. Solange der Host weg ist, kommt `multiplayer.hostAway` mit „Host ist kurz weg“.
+
+Wer die Spiel-Adresse hat, kann die Dateien dieser OpenScrapp im lokalen Netz lesen und mit dem Token beitreten. Das Token steht nicht in der Nahsuche. Öffentliche Adressen nimmt der Server nicht in den Code auf.
+
 ## Nativer Build
 
 Diese Funktion steckt nicht in Expo Go und nicht in einem älteren OpenScr-Build. Nötig sind:
 
 - das native Modul `react-native-tcp-socket` (Config-Plugin `with-react-native-tcp-socket`)
 - das lokale Modul `modules/expo-mdns` (Android `NsdManager`, iOS `NetService`)
-- Android: `INTERNET`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`. `CHANGE_WIFI_MULTICAST_STATE` nur im Modul und nur, solange gesucht oder angekündigt wird. Standort ist dafür nicht nötig.
+- Android: `INTERNET`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`, `CHANGE_WIFI_STATE`. `NEARBY_WIFI_DEVICES` mit `neverForLocation` nur, damit der Host den lokalen Hotspot selbst starten kann. Kein GPS. `CHANGE_WIFI_MULTICAST_STATE` nur im Modul und nur, solange gesucht oder angekündigt wird. Standort ist dafür nicht nötig.
+- Browser-Gäste, die QR-Codes und der letzte Spielstand laufen in JavaScript auf `react-native-tcp-socket`. Hotspot, Akku-Warnung und `screen.keepAwake` brauchen einen Build, der `expo-keep-awake` und die neuen Funktionen in `expo-network-info` enthält.
 - iOS: Die Bridge bietet `multiplayer` nicht an. `NSLocalNetworkUsageDescription` und `NSBonjourServices` werden nicht gesetzt. Mehrspieler bleibt die Android-Funktion.
 
 Ohne das mDNS-Modul bleibt der QR-Code nutzbar. `discover()` antwortet dann auf Deutsch, dass ein neuer Entwicklungs-Build fehlt.

@@ -23,7 +23,7 @@ const NOTIFY_RATE: RateRule = { max: 5, windowMs: 60_000 };
 const NET_RATE: RateRule = { max: 12, windowMs: 10_000 };
 
 export interface MethodSpec {
-  category: Permission | 'events';
+  category: Permission | 'events' | 'screen';
   action: string;
   rate: RateRule;
   validate: (args: unknown[]) => unknown[];
@@ -417,6 +417,12 @@ const BRIDGE_METHODS: Record<string, MethodSpec> = {
   'multiplayer.denyJoin': method({ category: 'multiplayer', action: 'denyJoin', validate: (a) => (exact(a, 1, 1), [str(a[0], 'Anfrage', 64)]) }),
   'multiplayer.endRoom': method({ category: 'multiplayer', action: 'endRoom', rate: MP_ROOM_RATE, validate: none }),
   'multiplayer.resume': method({ category: 'multiplayer', action: 'resume', rate: MP_ROOM_RATE, validate: none }),
+
+  'screen.keepAwake': method({
+    category: 'screen',
+    action: 'keepAwake',
+    validate: (a) => (exact(a, 0, 1), [a.length === 0 ? true : bool(a[0], 'Wach')]),
+  }),
 };
 
 export function bridgeMethod(name: string): MethodSpec | null {

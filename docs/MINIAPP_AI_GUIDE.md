@@ -111,6 +111,8 @@ await mp.endRoom();
 - JSON senden: Objekte, Listen, Zahlen, Zeichenketten, `true`, `false`, `null`.
 - Anzeigen nur über `textContent` oder `createTextNode`.
 - Den Raum mit `endRoom()` beenden, wenn das Spiel vorbei ist. `leave()` des Hosts beendet ihn nicht.
+- Für Gäste im Browser: `window.OpenScrBridge.guest === true` prüfen, dort nicht `host()` rufen, den vollen Stand per `broadcast` schicken und nicht aus `storage` lesen. Details in [MULTIPLAYER.md](MULTIPLAYER.md) unter „Browser-Gäste“.
+- Den Bildschirm mit `await OpenScrBridge.screen.keepAwake(true)` wachhalten. Keine Berechtigung, kein stummes Video. `keepAwake(false)` gibt ihn frei.
 
 ### Lassen
 

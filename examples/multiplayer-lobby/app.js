@@ -45,9 +45,13 @@ function render() {
   setText(roundNode, 'Runde ' + state.round + ' · Zähler ' + state.count + ' · Ja ' + ja + ' · Nein ' + nein);
 }
 
+const guestBrowser = window.OpenScrBridge.guest === true;
+
 function apply(message) {
   state = applyLobbyMessage(state, message);
-  if (storage && storage.set) void storage.set('lobby-state', state);
+  if (!guestBrowser && storage && storage.set) {
+    void storage.set('lobby-state', state).catch(function () {});
+  }
   render();
 }
 
@@ -98,9 +102,13 @@ async function adopt(info) {
   isHost = info.role === 'host';
   selfId = info.selfId || selfId;
   roster = info.players || roster;
-  if (storage && storage.get) {
-    const saved = await storage.get('lobby-state');
-    if (saved && saved.phase) state = saved;
+  if (!guestBrowser && storage && storage.get) {
+    try {
+      const saved = await storage.get('lobby-state');
+      if (saved && saved.phase) state = saved;
+    } catch (error) {
+      // Im Browser gibt es den App-Speicher nicht. Der Stand kommt als Nachricht.
+    }
   }
   setText(statusNode, info.status === 'hostAway' ? 'Host ist kurz weg' : 'Wieder im Raum ' + info.roomCode + '.');
   render();
@@ -241,6 +249,25 @@ document.getElementById('leave').onclick = async () => {
   render();
 };
 
-void mp.resume().then((info) => {
+void (async () => {
+  if (guestBrowser) {
+    try {
+      const info = await mp.resume();
+      if (info && info.role) {
+        await adopt(info);
+        return;
+      }
+      const room = await mp.join({ name: document.getElementById('name').value });
+      isHost = false;
+      selfId = room.playerId;
+      roster = room.players || [];
+      setText(statusNode, 'Browser-Gast, Raum ' + room.roomCode + '.');
+      render();
+    } catch (error) {
+      fail(error);
+    }
+    return;
+  }
+  const info = await mp.resume();
   if (info && info.status && info.status !== 'none') void adopt(info);
-});
+})();

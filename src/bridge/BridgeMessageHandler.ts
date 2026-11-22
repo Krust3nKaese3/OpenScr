@@ -329,6 +329,9 @@ export class BridgeMessageHandler {
               return () => window.OpenScrBridge.events.off('multiplayer.hostAway', callback);
             },
           },
+          screen: {
+            keepAwake: (on) => sendMessage('screen.keepAwake', on == null ? [] : [on !== false]),
+          },
           events: {
             on: (event, callback) => {
               if (!eventListeners[event]) {
