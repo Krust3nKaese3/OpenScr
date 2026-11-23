@@ -8,6 +8,8 @@ export interface DeepLink { miniapp: string; path: string; params: Record<string
 const SCHEMES = ['openscr:', 'exp+openscr:'];
 /** Reserved host: install link, never routed as a mini-app. */
 export const ADD_LINK_HOST = 'add';
+/** Reserved host: lock-screen notice opens this installed OpenScrapp by id. */
+export const LOCK_LINK_HOST = 'lock';
 
 const GITHUB_REPO_URL = /^https:\/\/github\.com\/[^/\s]+\/[^/\s?#]+(?:\.git)?\/?$/i;
 
@@ -29,13 +31,19 @@ export function parseDeepLink(url: string): DeepLink | null {
 export type ClassifiedLink =
   | { type: 'ignore' }
   | { type: 'add'; repoUrl: string }
+  | { type: 'lock'; appId: string }
   | { type: 'miniapp'; link: DeepLink };
 
-/** Add-links are handled before the mini-app open flow. `add` is never a mini-app match. */
+/** Add-links and lock-screen links are handled before the mini-app open flow. */
 export function classifyDeepLink(url: string): ClassifiedLink {
   const link = parseDeepLink(url);
   if (!link) return { type: 'ignore' };
   if (link.miniapp === ADD_LINK_HOST) return { type: 'add', repoUrl: (link.params.url || '').trim() };
+  if (link.miniapp === LOCK_LINK_HOST) {
+    const appId = (link.params.id || '').trim();
+    if (!appId) return { type: 'ignore' };
+    return { type: 'lock', appId };
+  }
   return { type: 'miniapp', link };
 }
 
@@ -87,7 +95,7 @@ export function matchesMiniApp(
   app: { id: string; repoUrl?: string; manifest: { name: string } },
   extraNames: string[] = [],
 ): boolean {
-  if (link.miniapp === ADD_LINK_HOST) return false;
+  if (link.miniapp === ADD_LINK_HOST || link.miniapp === LOCK_LINK_HOST) return false;
   const norm = (s: string) => (s || '').toLowerCase().replace(/[\s_-]+/g, '');
   const repo = (app.repoUrl || '').replace(/\.git$/i, '').split('/').pop() || '';
   return [app.manifest.name, app.id, repo, ...extraNames].some((n) => norm(n) === norm(link.miniapp));

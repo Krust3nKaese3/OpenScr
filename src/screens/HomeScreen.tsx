@@ -168,7 +168,7 @@ export const HomeScreen: React.FC = () => {
   };
   const performAddRef = useRef(performAdd);
   performAddRef.current = performAdd;
-  const openAppRef = useRef<(app: MiniApp) => Promise<void>>(async () => {});
+  const openAppRef = useRef<(app: MiniApp, opts?: { quiet?: boolean }) => Promise<void>>(async () => {});
 
   // openscr://add?url=… (and exp+openscr://add?url=…) installs a repo.
   // Other openscr://<miniapp>/… links open that mini-app. Handled before the mini-app flow.
@@ -185,6 +185,12 @@ export const HomeScreen: React.FC = () => {
         if (classified.type === 'ignore') return;
         if (classified.type === 'add') {
           await performAddRef.current(classified.repoUrl, 'link');
+          return;
+        }
+        if (classified.type === 'lock') {
+          const all = await StorageService.getApps();
+          const target = all.find((a) => a.id === classified.appId);
+          if (target) await openAppRef.current(target, { quiet: true });
           return;
         }
         const link = classified.link;
@@ -396,15 +402,16 @@ export const HomeScreen: React.FC = () => {
     }
   };
 
-  const openApp = async (app: MiniApp) => {
+  const openApp = async (app: MiniApp, opts?: { quiet?: boolean }) => {
+    const quiet = opts?.quiet === true;
     const reason = blockReasonFor(app.id, app.repoUrl, blocklist);
     if (reason) {
-      Alert.alert('OpenScrapp gesperrt', reason);
+      if (!quiet) Alert.alert('OpenScrapp gesperrt', reason);
       return;
     }
     const access = accessFor(app);
     if (!access.allowed) {
-      Alert.alert(ownReposOnly ? 'Nur eigene Repositories' : 'Entwicklermodus', access.reason);
+      if (!quiet) Alert.alert(ownReposOnly ? 'Nur eigene Repositories' : 'Entwicklermodus', access.reason);
       return;
     }
     let authToken: string | undefined;
@@ -414,7 +421,7 @@ export const HomeScreen: React.FC = () => {
         authToken = confirmed.token;
       } catch (error: any) {
         await refreshSession();
-        Alert.alert(ownReposOnly ? 'Nur eigene Repositories' : 'Entwicklermodus', error.message || 'Die Zugehörigkeit konnte nicht geprüft werden.');
+        if (!quiet) Alert.alert(ownReposOnly ? 'Nur eigene Repositories' : 'Entwicklermodus', error.message || 'Die Zugehörigkeit konnte nicht geprüft werden.');
         return;
       }
     }
@@ -428,7 +435,7 @@ export const HomeScreen: React.FC = () => {
         latest = undefined;
       }
     }
-    if (latest && updateStatus(app.commitSha, latest) === 'available' && !dismissedUpdates.current.has(app.id)) {
+    if (!quiet && latest && updateStatus(app.commitSha, latest) === 'available' && !dismissedUpdates.current.has(app.id)) {
       const installed = app;
       const newest = latest;
       Alert.alert(
@@ -514,7 +521,7 @@ export const HomeScreen: React.FC = () => {
   return (
     <View style={styles.container}>
       {selectedApp ? (
-        <MiniAppRunner app={selectedApp} onClose={() => setSelectedApp(null)} />
+        <MiniAppRunner key={selectedApp.id} app={selectedApp} onClose={() => setSelectedApp(null)} />
       ) : (
         <>
           <View style={styles.header}>

@@ -1,10 +1,20 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Modal, StyleSheet, TouchableOpacity, ScrollView, Platform } from 'react-native';
+import { View, Text, Modal, StyleSheet, TouchableOpacity, ScrollView, Platform, Switch } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MiniApp, Permission } from '../types';
 import { ALL_PERMISSIONS, PERMISSION_INFO } from '../bridge/permissionInfo';
 import { permissionsOfferedOnPlatform, showsLearningChrome } from '../services/iosPolicy';
 import { StorageService } from '../services/StorageService';
 import { versionLine } from '../services/githubPin';
+import {
+  SHOW_OVER_LOCK_KEY,
+  clearOverLockNotice,
+  publishOverLockNotice,
+  readShowOverLockMap,
+  showOverLockEnabled,
+  showOverLockNativeReady,
+  withShowOverLock,
+} from '../services/showOverLock';
 
 interface AppInfoModalProps {
   app: MiniApp | null;
@@ -31,6 +41,8 @@ export const AppInfoModal: React.FC<AppInfoModalProps> = ({
 }) => {
   const [granted, setGranted] = useState<Permission[]>([]);
   const [denied, setDenied] = useState<Permission[]>([]);
+  const [overLock, setOverLock] = useState(false);
+  const android = Platform.OS === 'android';
 
   useEffect(() => {
     if (!app) return;
@@ -38,13 +50,24 @@ export const AppInfoModal: React.FC<AppInfoModalProps> = ({
     Promise.all([
       StorageService.getAppPermissions(app.id),
       StorageService.getDeniedPermissions(app.id),
-    ]).then(([nextGranted, nextDenied]) => {
+      android ? AsyncStorage.getItem(SHOW_OVER_LOCK_KEY) : Promise.resolve(null),
+    ]).then(([nextGranted, nextDenied, overRaw]) => {
       if (!live) return;
       setGranted(nextGranted);
       setDenied(nextDenied);
+      setOverLock(showOverLockEnabled(readShowOverLockMap(overRaw), app.id));
     }).catch(() => {});
     return () => { live = false; };
-  }, [app]);
+  }, [app, android]);
+
+  const setOverLockChoice = async (on: boolean) => {
+    if (!app || !android) return;
+    setOverLock(on);
+    const map = withShowOverLock(readShowOverLockMap(await AsyncStorage.getItem(SHOW_OVER_LOCK_KEY)), app.id, on);
+    await AsyncStorage.setItem(SHOW_OVER_LOCK_KEY, JSON.stringify(map));
+    if (on) await publishOverLockNotice(app.id, app.manifest.name);
+    else clearOverLockNotice(app.id);
+  };
 
   const decide = async (permission: Permission, decision: 'granted' | 'denied') => {
     if (!app) return;
@@ -67,6 +90,24 @@ export const AppInfoModal: React.FC<AppInfoModalProps> = ({
             <Text selectable style={styles.repo}>{app?.repoUrl}</Text>
             {app?.manifest.description ? <Text style={styles.desc}>{app.manifest.description}</Text> : null}
             {blocked ? <Text style={styles.blocked}>Gesperrt: {blocked}</Text> : null}
+            {android ? (
+              <View style={styles.row}>
+                <View style={styles.rowText}>
+                  <Text style={styles.permTitle}>Über dem Sperrbildschirm anzeigen</Text>
+                  <Text style={styles.permDesc}>
+                    Aus, bis du es einschaltest. Dann bleibt diese geöffnete OpenScrapp sichtbar, wenn das Handy gesperrt ist. Der Bildschirm darf ausgehen. Die Einschalttaste zeigt sie ohne PIN. Eine Benachrichtigung auf dem Sperrbildschirm nennt diese OpenScrapp, zum Beispiel „Werwolf öffnen“. Sie lässt sich wegwischen, bleibt nach dem Schließen der App stehen und verschwindet, wenn du die Einstellung ausmachst. Tippen öffnet nur diese OpenScrapp, mit ihrem letzten Stand. Katalog, Einstellungen und andere Apps bleiben hinter der Sperre.
+                  </Text>
+                  {overLock && !showOverLockNativeReady() ? (
+                    <Text style={styles.state}>Wirkt ab dem nächsten App-Build.</Text>
+                  ) : null}
+                </View>
+                <Switch
+                  value={overLock}
+                  onValueChange={(on) => { void setOverLockChoice(on); }}
+                  accessibilityLabel="Über dem Sperrbildschirm anzeigen"
+                />
+              </View>
+            ) : null}
             <Text style={styles.section}>Berechtigungen</Text>
             <Text style={styles.hint}>Jede Funktion gilt nur für diese OpenScrapp. Widerrufene Funktionen fragen nicht erneut, bis du sie hier wieder erlaubst.</Text>
             {permissionsOfferedOnPlatform(Platform.OS, ALL_PERMISSIONS).map((permission) => {

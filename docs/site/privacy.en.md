@@ -52,6 +52,8 @@ Updating an OpenScrapp replaces only the downloaded files. Saves and other stora
 
 Spotify, storage, multiplayer and every other bridge feature need their own consent for each OpenScrapp. The choice is stored for that OpenScrapp. You can revoke it under “Info und Berechtigungen”.
 
+The setting “Über dem Sperrbildschirm anzeigen” is per OpenScrapp and stays off until you turn it on. When it is on, Android shows only the OpenScrapp that is open over the device lock, without the PIN. The screen may still turn off. The catalog, settings and other OpenScr screens stay behind the lock. The same setting posts a notification on the device that shows the OpenScrapp’s name on the lock screen. Tapping it opens only that OpenScrapp. The notice can be swiped away and is removed when you turn the setting off. The setting stays on the device.
+
 The bridge does not expose the file system, contacts or GPS coordinates. The camera is used to read QR codes (install an OpenScrapp or join a game room). OpenScr does not save a photo from that scan. The microphone is not used.
 
 OpenScr does not request a location permission. `ACCESS_FINE_LOCATION` and `ACCESS_BACKGROUND_LOCATION` are not part of this release. GPS coordinates are not read. On current Android versions the Wi-Fi name is not available without that permission, so it stays hidden. Bluetooth scanning is not used to derive a location (`neverForLocation`).

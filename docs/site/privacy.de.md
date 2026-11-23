@@ -52,6 +52,8 @@ Aktualisieren einer OpenScrapp ersetzt nur die geladenen Dateien. Spielstände u
 
 Spotify, Speicher, Mehrspieler und jede andere Brücken-Funktion brauchen eine eigene Zustimmung pro OpenScrapp. Die Entscheidung wird zu dieser OpenScrapp gespeichert. In „Info und Berechtigungen“ kannst du sie widerrufen.
 
+Die Einstellung „Über dem Sperrbildschirm anzeigen“ gilt pro OpenScrapp und ist aus, bis du sie einschaltest. Eingeschaltet zeigt Android nur die gerade geöffnete OpenScrapp über der Gerätesperre, ohne die PIN. Der Bildschirm darf dabei ausgehen. Katalog, Einstellungen und andere Bildschirme von OpenScr bleiben hinter der Sperre. Dieselbe Einstellung legt eine Benachrichtigung auf das Gerät, die auf dem Sperrbildschirm den Namen der OpenScrapp zeigt. Tippen öffnet nur diese OpenScrapp. Die Meldung lässt sich wegwischen und wird gelöscht, wenn du die Einstellung ausschaltest. Die Einstellung bleibt auf dem Gerät.
+
 Die Brücke gibt kein Dateisystem, keine Kontakte und keine GPS-Koordinaten frei. Die Kamera dient dem Lesen von QR-Codes (OpenScrapp installieren oder einem Spielraum beitreten). OpenScr speichert dabei kein Foto. Ein Mikrofon wird nicht verwendet.
 
 OpenScr fordert keine Standortberechtigung an. `ACCESS_FINE_LOCATION` und `ACCESS_BACKGROUND_LOCATION` sind nicht Teil dieses Release. GPS-Koordinaten werden nicht gelesen. Den WLAN-Namen gibt Android auf aktuellen Versionen ohne diese Berechtigung nicht heraus; dann bleibt er verborgen. Bluetooth-Suche ist nicht dazu da, einen Standort abzuleiten (`neverForLocation`).

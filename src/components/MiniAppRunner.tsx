@@ -1,5 +1,6 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { View, StyleSheet, StatusBar, BackHandler, ActivityIndicator, Text, ScrollView, TouchableOpacity, Platform, useWindowDimensions } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import WebView, { WebViewMessageEvent } from 'react-native-webview';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -17,6 +18,7 @@ import { SourceCodeModal } from './SourceCodeModal';
 import { learningPaneHeights, permissionsOfferedOnPlatform, showsLearningChrome } from '../services/iosPolicy';
 import { cancelMpScan, detachMultiplayer, dismissMpUi, endRoom, submitMpScan, subscribeMpUi, subscribeHostPresence, approveJoin, denyJoin, resumeMultiplayer, showMultiplayerQr, type HostPresence, type MpUiState } from '../services/multiplayer/session';
 import { setGuestContent } from '../services/multiplayer/guestContent';
+import { applyShowOverLock, publishOverLockNotice, readShowOverLockMap, shouldShowOverLock, showOverLockEnabled, SHOW_OVER_LOCK_KEY } from '../services/showOverLock';
 import {
   assetRuntimeSource,
   assetUri,
@@ -54,6 +56,27 @@ export const MiniAppRunner: React.FC<MiniAppRunnerProps> = ({ app, onClose }) =>
   const [showSource, setShowSource] = useState(false);
   const learning = showsLearningChrome(Platform.OS);
   const panes = learningPaneHeights(useWindowDimensions().height);
+  const leaveScrapp = () => {
+    applyShowOverLock(false);
+    onClose();
+  };
+
+  useLayoutEffect(() => {
+    let live = true;
+    void (async () => {
+      const raw = await AsyncStorage.getItem(SHOW_OVER_LOCK_KEY);
+      if (!live) return;
+      const enabled = showOverLockEnabled(readShowOverLockMap(raw), app.id);
+      if (shouldShowOverLock(Platform.OS, enabled, true)) {
+        applyShowOverLock(true);
+        void publishOverLockNotice(app.id, app.manifest.name);
+      }
+    })();
+    return () => {
+      live = false;
+      applyShowOverLock(false);
+    };
+  }, [app.id]);
 
   const webLoadedRef = useRef(false);
   const deliverDeepLink = () => {
@@ -82,6 +105,7 @@ export const MiniAppRunner: React.FC<MiniAppRunnerProps> = ({ app, onClose }) =>
     ScreenOrientation.unlockAsync();
 
     const backSub = BackHandler.addEventListener('hardwareBackPress', () => {
+      applyShowOverLock(false);
       onClose();
       return true;
     });
@@ -368,7 +392,7 @@ export const MiniAppRunner: React.FC<MiniAppRunnerProps> = ({ app, onClose }) =>
           <TouchableOpacity style={styles.errorButton} onPress={handleCopyError}>
             <Text style={styles.errorButtonText}>Copy Error</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.errorButton, styles.closeButton]} onPress={onClose}>
+          <TouchableOpacity style={[styles.errorButton, styles.closeButton]} onPress={leaveScrapp}>
             <Text style={styles.errorButtonText}>Close</Text>
           </TouchableOpacity>
         </View>
@@ -384,7 +408,7 @@ export const MiniAppRunner: React.FC<MiniAppRunnerProps> = ({ app, onClose }) =>
         <View style={[styles.devBar, { height: panes.bar }]}>
           <Text style={styles.devBarTitle}>Entwicklungsumgebung · eigener Code</Text>
           <View style={styles.devBarActions}>
-            <TouchableOpacity style={styles.devBarButton} onPress={onClose} accessibilityLabel="Zurück">
+            <TouchableOpacity style={styles.devBarButton} onPress={leaveScrapp} accessibilityLabel="Zurück">
               <Text style={styles.devBarButtonText}>Zurück</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.devBarButton} onPress={() => setShowSource(true)} accessibilityLabel="Quelltext">
@@ -437,7 +461,7 @@ export const MiniAppRunner: React.FC<MiniAppRunnerProps> = ({ app, onClose }) =>
 
       {learning ? null : (
       <TouchableOpacity
-        onPress={onClose}
+        onPress={leaveScrapp}
         style={{ position: 'absolute', top: 8, right: 8, width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       >
