@@ -24,6 +24,7 @@ export interface MpUiState {
   askName?: string;
   gameUrl?: string;
   batteryWarning?: string;
+  qrFocus?: 'all' | 'wifi' | 'game' | 'hotspot';
 }
 
 export interface HostPresence {
@@ -243,13 +244,14 @@ function hostUi(session: LiveSession): MpUiState {
   };
 }
 
-function showHost(session: LiveSession): void {
+function showHost(session: LiveSession, qrFocus?: MpUiState['qrFocus']): void {
   publishPresence({
     roomCode: session.roomCode,
     gameUrl: session.gameUrl,
     batteryWarning: session.batteryWarning,
   });
-  setUi(hostUi(session));
+  const kept = qrFocus ?? (ui?.mode === 'host' ? ui.qrFocus : undefined);
+  setUi({ ...hostUi(session), qrFocus: kept });
 }
 
 async function hostAwake(on: boolean): Promise<void> {
@@ -1049,10 +1051,13 @@ export async function broadcastMultiplayer(appId: string, data: unknown): Promis
   return { seq: 0 };
 }
 
-export function showMultiplayerQr(appId: string): { roomCode: string; qrPayload: string; gameUrl: string } {
+export function showMultiplayerQr(
+  appId: string,
+  focus: MpUiState['qrFocus'] = 'all',
+): { roomCode: string; qrPayload: string; gameUrl: string } {
   const session = requireSession(appId);
   if (session.role !== 'host') throw new Error('Nur der Host zeigt den QR-Code.');
-  showHost(session);
+  showHost(session, focus);
   return { roomCode: session.roomCode, qrPayload: session.qrPayload, gameUrl: session.gameUrl };
 }
 

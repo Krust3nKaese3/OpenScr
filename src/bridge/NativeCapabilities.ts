@@ -454,7 +454,10 @@ export class NativeCapabilities {
     send: (data: unknown, opts?: { to?: string }) => sendMultiplayer(this.appId, data, opts),
     broadcast: (data: unknown) => broadcastMultiplayer(this.appId, data),
     leave: () => leaveMultiplayer(this.appId),
-    showQr: () => showMultiplayerQr(this.appId),
+    showQr: () => showMultiplayerQr(this.appId, 'all'),
+    showWifiQr: () => showMultiplayerQr(this.appId, 'wifi'),
+    showGameQr: () => showMultiplayerQr(this.appId, 'game'),
+    showHotspotQr: () => showMultiplayerQr(this.appId, 'hotspot'),
     discover: () => discoverMultiplayer(this.appId, (event, data) => this.eventEmitter.emit(event, data)),
     stopDiscovery: () => stopDiscoveryMultiplayer(),
     setDiscoverable: (on: boolean) => setDiscoverableMultiplayer(this.appId, on),
@@ -470,6 +473,11 @@ export class NativeCapabilities {
       await setKeepAwake(`scrapp:${this.appId}`, active);
       return { on: active };
     },
+  };
+
+  keepAwake = {
+    acquire: () => this.screen.keepAwake(true),
+    release: () => this.screen.keepAwake(false),
   };
 
   events = {

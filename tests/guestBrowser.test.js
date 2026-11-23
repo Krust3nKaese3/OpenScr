@@ -50,6 +50,11 @@ test('Gastseite setzt die Brücke und merkt sich die Identität', () => {
   assert.match(GUEST_SHIM_SOURCE, /guest:\s*true/);
   assert.match(GUEST_SHIM_SOURCE, /Im Browser-Gast nicht verfügbar/);
   assert.match(GUEST_SHIM_SOURCE, /openscr-guest:/);
+  assert.match(GUEST_SHIM_SOURCE, /showWifiQr/);
+  assert.match(GUEST_SHIM_SOURCE, /showGameQr/);
+  assert.match(GUEST_SHIM_SOURCE, /showHotspotQr/);
+  assert.match(GUEST_SHIM_SOURCE, /acquire:\s*function/);
+  assert.match(GUEST_SHIM_SOURCE, /release:\s*function/);
   const html = injectGuestDocument('<html><head></head><body>Spiel</body></html>', '0123456789abcdef', 'wolf', 'K7QP');
   assert.match(html, /openscr-guest\.js/);
   assert.match(html, /"appId":"wolf"/);

@@ -59,6 +59,9 @@ export interface MultiplayerBridge {
   onPlayersChanged(cb: (roster: MultiplayerRoster) => void): () => void;
   leave(): Promise<{ left: boolean }>;
   showQr(): Promise<{ roomCode: string; qrPayload: string }>;
+  showWifiQr(): Promise<{ roomCode: string; qrPayload: string }>;
+  showGameQr(): Promise<{ roomCode: string; qrPayload: string }>;
+  showHotspotQr(): Promise<{ roomCode: string; qrPayload: string }>;
   discover(opts?: { onRooms?: (rooms: DiscoveredRoom[]) => void }): Promise<{ started: boolean }>;
   stopDiscovery(): Promise<{ stopped: boolean }>;
   setDiscoverable(on: boolean): Promise<{ discoverable: boolean }>;
@@ -80,6 +83,9 @@ export const MULTIPLAYER_BRIDGE_METHODS = [
   'onPlayersChanged',
   'leave',
   'showQr',
+  'showWifiQr',
+  'showGameQr',
+  'showHotspotQr',
   'discover',
   'stopDiscovery',
   'setDiscoverable',

@@ -115,6 +115,13 @@ async function adopt(info) {
   if (isHost) await publishState();
 }
 
+async function openInvite(which) {
+  if (which === 'wifi') return mp.showWifiQr();
+  if (which === 'game') return mp.showGameQr();
+  if (which === 'hotspot') return mp.showHotspotQr();
+  return mp.showQr();
+}
+
 function fail(error) {
   setText(statusNode, error && error.message ? error.message : 'Das hat nicht geklappt.');
 }
@@ -129,6 +136,7 @@ document.getElementById('host').onclick = async () => {
     });
     await mp.setDiscoverable(true);
     await mp.showQr();
+    await openInvite('wifi');
     isHost = true;
     selfId = room.playerId;
     roster = room.players || [];

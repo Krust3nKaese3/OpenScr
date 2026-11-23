@@ -451,6 +451,9 @@ export const GUEST_SHIM_SOURCE = `(function () {
       return Promise.resolve({ left: true });
     },
     showQr: function () { return guestOnly(); },
+    showWifiQr: function () { return guestOnly(); },
+    showGameQr: function () { return guestOnly(); },
+    showHotspotQr: function () { return guestOnly(); },
     discover: function () { return guestOnly(); },
     stopDiscovery: function () { return guestOnly(); },
     setDiscoverable: function () { return guestOnly(); },
@@ -493,7 +496,11 @@ export const GUEST_SHIM_SOURCE = `(function () {
     network: stub(),
     media: stub(),
     crypto: stub(),
-    screen: stub(),
+    screen: { keepAwake: function () { return Promise.resolve({ on: false }); } },
+    keepAwake: {
+      acquire: function () { return Promise.resolve({ on: false }); },
+      release: function () { return Promise.resolve({ on: false }); },
+    },
   };
   window.OpenScrBridge = bridge;
   window.EveryAppBridge = bridge;

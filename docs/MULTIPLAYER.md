@@ -38,6 +38,9 @@ const room = await mp.host({ maxPlayers: 8, name: 'Ada', discoverable: true, joi
 // room.roomCode, room.qrPayload, room.playerId, room.players
 
 await mp.showQr();
+await mp.showWifiQr();
+await mp.showGameQr();
+await mp.showHotspotQr();
 await mp.setDiscoverable(false);
 
 // Gast sucht nur Räume derselben OpenScrapp. Die Liste nennt Name, Raumcode und Spielerzahl, keine Adresse.
@@ -133,9 +136,9 @@ Die Codes bleiben erreichbar, auch mitten im Spiel: OpenScr blendet einen kleine
 
 Der Spiel-Code liefert die Dateien der geöffneten OpenScrapp und ein kleines Skript `openscr-guest.js`. Das Skript setzt `window.OpenScrBridge` und `window.EveryAppBridge`. `OpenScrBridge.guest` ist `true`. Die Mehrspieler-Methoden des Gasts sind dieselben wie in der App und laufen über WebSocket:
 
-`join`, `send`, `broadcast`, `leave`, `resume`, `onMessage`, `onPlayersChanged`, `onResumed`, `onHostAway`.
+`join`, `send`, `broadcast`, `leave`, `resume`, `onMessage`, `onPlayersChanged`, `onJoinRequest`, `onResumed`, `onHostAway`, `showQr`, `showWifiQr`, `showGameQr`, `showHotspotQr`.
 
-`host`, `discover`, `showQr`, `approveJoin`, `denyJoin`, `endRoom` und `setDiscoverable` lehnen im Browser ab: „Im Browser ist nur die Gast-Ansicht da.“
+Die Form ist dieselbe wie in der App: `host`, `join`, `send`, `broadcast` und die Events. `host`, `discover`, `showQr`, `showWifiQr`, `showGameQr`, `showHotspotQr`, `approveJoin`, `denyJoin`, `endRoom` und `setDiscoverable` lehnen im Browser ab: „Im Browser ist nur die Gast-Ansicht da.“ `keepAwake.acquire` und `keepAwake.release` sind da und tun im Browser nichts.
 
 ### Was eine OpenScrapp dafür tun muss
 
@@ -180,7 +183,7 @@ Diese Aufrufe antworten mit „Im Browser-Gast nicht verfügbar.“:
 - Kamera, Sensoren, Vibration, Benachrichtigungen
 - Hintergrund, Kacheln, Popups
 - Netzinfo, Roh-Sockets, HTTP über die Bridge, Kryptografie, Zwischenablage
-- Bildschirm wachhalten (`screen.keepAwake`)
+- Bildschirm wachhalten (`OpenScrBridge.keepAwake.acquire` / `release`, dasselbe wie `screen.keepAwake`)
 
 Der Gast-Browser hat seine eigene `fetch`-Funktion. Die Bridge-Methode `http` ist es nicht. Der WebSocket zum Host bleibt offen und verbindet sich mit wachsendem Abstand neu. Solange der Host weg ist, kommt `multiplayer.hostAway` mit „Host ist kurz weg“.
 

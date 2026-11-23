@@ -298,6 +298,9 @@ export class BridgeMessageHandler {
             broadcast: (data) => sendMessage('multiplayer.broadcast', [data]),
             leave: () => sendMessage('multiplayer.leave', []),
             showQr: () => sendMessage('multiplayer.showQr', []),
+            showWifiQr: () => sendMessage('multiplayer.showWifiQr', []),
+            showGameQr: () => sendMessage('multiplayer.showGameQr', []),
+            showHotspotQr: () => sendMessage('multiplayer.showHotspotQr', []),
             discover: (opts) => {
               if (opts && opts.onRooms) window.OpenScrBridge.events.on('multiplayer.rooms', (payload) => opts.onRooms(payload.rooms || []));
               return sendMessage('multiplayer.discover', []);
@@ -328,6 +331,10 @@ export class BridgeMessageHandler {
               window.OpenScrBridge.events.on('multiplayer.hostAway', callback);
               return () => window.OpenScrBridge.events.off('multiplayer.hostAway', callback);
             },
+          },
+          keepAwake: {
+            acquire: () => sendMessage('screen.keepAwake', [true]),
+            release: () => sendMessage('screen.keepAwake', [false]),
           },
           screen: {
             keepAwake: (on) => sendMessage('screen.keepAwake', on == null ? [] : [on !== false]),

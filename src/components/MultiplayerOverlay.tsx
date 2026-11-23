@@ -33,6 +33,14 @@ export function MultiplayerOverlay({ state, onDone, onEnd, onScanned, onCancel, 
   const [showAppQr, setShowAppQr] = useState(false);
 
   useEffect(() => {
+    if (state?.mode !== 'host' || !state.qrFocus) return;
+    if (state.qrFocus === 'wifi') setStep(getInviteDraft()?.ssid ? 'codes' : 'wlan');
+    else if (state.qrFocus === 'game') setStep('codes');
+    else if (state.qrFocus === 'hotspot') setStep('hotspot');
+    else setStep(getInviteDraft() ? 'codes' : 'choose');
+  }, [state?.mode, state?.qrFocus, state?.roomCode]);
+
+  useEffect(() => {
     if (state?.mode !== 'host' || step !== 'wlan') return undefined;
     let cancel = false;
     void readWifiLabel().then(async (info) => {
