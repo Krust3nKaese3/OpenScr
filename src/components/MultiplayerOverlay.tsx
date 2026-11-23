@@ -5,7 +5,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import QRCode from 'qrcode';
 import { decodeJoinUrl } from '../services/multiplayer/qr';
 import type { MpUiState } from '../services/multiplayer/session';
-import { encodeWifiQr } from '../services/multiplayer/guestHttp';
+import { encodeWifiQr, shareableGameUrl } from '../services/multiplayer/guestHttp';
 import { getInviteDraft, setInviteDraft, type InviteDraft } from '../services/multiplayer/invite';
 import { rememberWifiPassword } from '../services/multiplayer/wifiMemory';
 import { openTetherSettings, openWifiSettings, startHotspot } from '../services/multiplayer/lanShare';
@@ -254,7 +254,8 @@ function GameLinkActions({ url }: { url: string }) {
     setTimeout(() => setCopied(false), 1600);
   };
   const share = () => {
-    void Share.share({ message: `Komm in mein Spiel: ${url} (gleiches WLAN nötig)` });
+    const shared = shareableGameUrl(url);
+    void Share.share({ message: `Komm in mein Spiel! (gleiches WLAN nötig)\n\n${shared}` });
   };
   return (
     <View style={styles.linkRow}>
