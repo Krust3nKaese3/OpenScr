@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Alert, Share } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import QRCode from 'qrcode';
 import { decodeJoinUrl } from '../services/multiplayer/qr';
@@ -171,6 +172,7 @@ export function MultiplayerOverlay({ state, onDone, onEnd, onScanned, onCancel, 
               {state.gameUrl ? <QrBlock payload={state.gameUrl} size={220} /> : <Text style={[styles.gameText, { color: tokens.muted }]}>Der Browser-Server braucht einen Build mit TCP.</Text>}
               <Text style={[styles.gameText, { color: tokens.text }]}>Scanne den Code mit der normalen Kamera. Du brauchst OpenScr nicht.</Text>
             </View>
+            {state.gameUrl ? <GameLinkActions url={state.gameUrl} /> : null}
             <TouchableOpacity onPress={() => setShowAppQr((value) => !value)}>
               <Text style={[styles.quiet, { color: tokens.muted }]}>{showAppQr ? 'App-Code ausblenden' : 'Code für die OpenScr-App'}</Text>
             </TouchableOpacity>
@@ -196,6 +198,7 @@ export function MultiplayerOverlay({ state, onDone, onEnd, onScanned, onCancel, 
               {state.gameUrl ? <QrBlock payload={state.gameUrl} size={72} /> : <Text style={[styles.gameText, { color: tokens.muted }]}>Der Browser-Server braucht einen Build mit TCP.</Text>}
               <Text style={[styles.gameText, { color: tokens.text }]}>Scanne den Code mit der normalen Kamera. Du brauchst OpenScr nicht.</Text>
             </View>
+            {state.gameUrl ? <GameLinkActions url={state.gameUrl} /> : null}
             <TouchableOpacity onPress={() => setShowAppQr((value) => !value)}>
               <Text style={[styles.quiet, { color: tokens.muted }]}>{showAppQr ? 'App-Code ausblenden' : 'Code für die OpenScr-App'}</Text>
             </TouchableOpacity>
@@ -239,6 +242,28 @@ export function MultiplayerOverlay({ state, onDone, onEnd, onScanned, onCancel, 
           </>
         )}
       </ScrollView>
+    </View>
+  );
+}
+
+function GameLinkActions({ url }: { url: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    await Clipboard.setStringAsync(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1600);
+  };
+  const share = () => {
+    void Share.share({ message: `Komm in mein Spiel: ${url} (gleiches WLAN nötig)` });
+  };
+  return (
+    <View style={styles.linkRow}>
+      <TouchableOpacity style={styles.linkBtn} onPress={() => { void copy(); }} accessibilityLabel="Link kopieren">
+        <Text style={styles.linkBtnText}>{copied ? 'Kopiert' : 'Link kopieren'}</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.linkBtn} onPress={share} accessibilityLabel="Teilen">
+        <Text style={styles.linkBtnText}>Teilen</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -298,6 +323,9 @@ const styles = StyleSheet.create({
   stepTitle: { fontSize: 18, fontWeight: '700' },
   qrCard: { borderRadius: 18, alignItems: 'center', paddingVertical: 16, marginBottom: 16 },
   gameCard: { borderRadius: 18, flexDirection: 'row', alignItems: 'center', padding: 12, gap: 12, marginBottom: 8 },
+  linkRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
+  linkBtn: { flex: 1, borderRadius: 14, paddingVertical: 12, alignItems: 'center', backgroundColor: '#1c1c22' },
+  linkBtnText: { color: '#F4F4F5', fontSize: 15, fontWeight: '700' },
   gameText: { flex: 1, fontSize: 14, lineHeight: 20 },
   quiet: { textAlign: 'center', marginVertical: 8, fontSize: 14 },
   qrPad: { backgroundColor: '#fff', padding: 8, borderRadius: 12 },
