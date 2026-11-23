@@ -64,6 +64,11 @@ class ExpoSpotifyModule : Module() {
       SpotifyRuntime.disconnect(ctx(), "disconnect")
       true
     }
+    AsyncFunction("reconnectIfRemembered") {
+      boot()
+      SpotifyRuntime.reconnectIfRemembered()
+      true
+    }
     AsyncFunction("play") { uri: String, positionMs: Double, promise: Promise ->
       boot()
       SpotifyRuntime.play(uri, positionMs, promise)

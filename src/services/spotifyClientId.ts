@@ -136,6 +136,19 @@ export function readRunningAndroidPackage(): string | null {
   }
 }
 
+export const SPOTIFY_AUTH_NEEDS_UNLOCK =
+  'Die erste Spotify-Freigabe braucht ein entsperrtes Handy. Danach verbindet sich die Steuerung auch über dem Sperrbildschirm wieder, ohne die PIN.';
+
+/** Quiet App Remote restore. The native module also checks the remembered session and a user disconnect. */
+export function shouldResumeSpotifyRemote(input: {
+  platform: string;
+  granted: boolean;
+  remembered: boolean;
+  stopped: boolean;
+}): boolean {
+  return input.platform === 'android' && input.granted === true && input.remembered === true && input.stopped !== true;
+}
+
 export const MISSING_SPOTIFY_CLIENT_ID =
   'Keine Spotify Client ID hinterlegt. Bitte in den OpenScr-Einstellungen eintragen.';
 

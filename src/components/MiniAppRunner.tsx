@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
-import { View, StyleSheet, StatusBar, BackHandler, ActivityIndicator, Text, ScrollView, TouchableOpacity, Platform, useWindowDimensions } from 'react-native';
+import { View, StyleSheet, StatusBar, BackHandler, ActivityIndicator, Text, ScrollView, TouchableOpacity, Platform, useWindowDimensions, AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import WebView, { WebViewMessageEvent } from 'react-native-webview';
 import * as ScreenOrientation from 'expo-screen-orientation';
@@ -19,6 +19,8 @@ import { learningPaneHeights, permissionsOfferedOnPlatform, showsLearningChrome 
 import { cancelMpScan, detachMultiplayer, dismissMpUi, endRoom, submitMpScan, subscribeMpUi, subscribeHostPresence, approveJoin, denyJoin, resumeMultiplayer, showMultiplayerQr, type HostPresence, type MpUiState } from '../services/multiplayer/session';
 import { setGuestContent } from '../services/multiplayer/guestContent';
 import { applyShowOverLock, publishOverLockNotice, readShowOverLockMap, shouldShowOverLock, showOverLockEnabled, SHOW_OVER_LOCK_KEY } from '../services/showOverLock';
+import { spotifyReconnectQuiet } from '../services/spotifySettings';
+import { shouldResumeSpotifyRemote } from '../services/spotifyClientId';
 import {
   assetRuntimeSource,
   assetUri,
@@ -141,6 +143,16 @@ export const MiniAppRunner: React.FC<MiniAppRunnerProps> = ({ app, onClose }) =>
 
   const declaredPermissions = () => (app.manifest.permissions || []).filter(isPermission);
 
+  const resumeSpotify = () => {
+    if (!shouldResumeSpotifyRemote({
+      platform: Platform.OS,
+      granted: grantedRef.current.includes('spotify'),
+      remembered: true,
+      stopped: false,
+    })) return;
+    void spotifyReconnectQuiet();
+  };
+
   const initApp = async () => {
     const existingPermissions = await StorageService.getAppPermissions(app.id);
     const deniedPermissions = await StorageService.getDeniedPermissions(app.id);
@@ -153,6 +165,7 @@ export const MiniAppRunner: React.FC<MiniAppRunnerProps> = ({ app, onClose }) =>
       setShowPermissionModal(true);
     } else {
       await loadApp(existingPermissions);
+      resumeSpotify();
     }
   };
 
@@ -167,7 +180,16 @@ export const MiniAppRunner: React.FC<MiniAppRunnerProps> = ({ app, onClose }) =>
     setGrantedPermissions(next);
     setShowPermissionModal(false);
     await loadApp(next);
+    resumeSpotify();
   };
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') resumeSpotify();
+    });
+    return () => sub.remove();
+  }, [app.id]);
 
   const handleDenyPermissions = async () => {
     for (const permission of installPermissions) {

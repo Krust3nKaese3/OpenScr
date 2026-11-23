@@ -13,6 +13,8 @@ const {
   PRODUCTION_PLAY_CLASSIC_SHA1,
   PRODUCTION_UPLOAD_SHA1,
   PRODUCTION_ANDROID_SHA1S,
+  SPOTIFY_AUTH_NEEDS_UNLOCK,
+  shouldResumeSpotifyRemote,
   normalizeSpotifyClientId,
   normalizeSpotifySearch,
   resolveSpotifyClientId,
@@ -50,6 +52,19 @@ test('client id precedence: settings, then mini-app, then prefill', () => {
   assert.strictEqual(shaped.source, 'settings');
   assert.strictEqual(shaped.clientId, SETTINGS);
   assert.strictEqual(shaped.bridgeClientId, BRIDGE);
+});
+
+test('spotify remote resumes over the lock screen only after a remembered session', () => {
+  const fs = require('fs');
+  const path = require('path');
+  assert.strictEqual(shouldResumeSpotifyRemote({ platform: 'android', granted: true, remembered: true, stopped: false }), true);
+  assert.strictEqual(shouldResumeSpotifyRemote({ platform: 'android', granted: true, remembered: false, stopped: false }), false);
+  assert.strictEqual(shouldResumeSpotifyRemote({ platform: 'android', granted: false, remembered: true, stopped: false }), false);
+  assert.strictEqual(shouldResumeSpotifyRemote({ platform: 'android', granted: true, remembered: true, stopped: true }), false);
+  assert.strictEqual(shouldResumeSpotifyRemote({ platform: 'ios', granted: true, remembered: true, stopped: false }), false);
+  const kt = fs.readFileSync(path.join(__dirname, '../modules/expo-spotify/android/src/main/java/expo/modules/spotify/SpotifySupport.kt'), 'utf8');
+  assert.ok(kt.includes(SPOTIFY_AUTH_NEEDS_UNLOCK));
+  assert.ok(fs.readFileSync(path.join(__dirname, '../SPOTIFY.md'), 'utf8').includes(SPOTIFY_AUTH_NEEDS_UNLOCK));
 });
 
 test('client id format', () => {
