@@ -51,6 +51,10 @@ async function deleteSnapshot(appId: string): Promise<void> {
 
 function secure(): { getItemAsync?: (key: string) => Promise<string | null>; setItemAsync?: (key: string, value: string) => Promise<void>; deleteItemAsync?: (key: string) => Promise<void> } | null {
   try {
+    const { requireOptionalNativeModule } = require('expo-modules-core');
+    const native = requireOptionalNativeModule('ExpoSecureStore');
+    // The JS wrapper exists on web, but the native method does not.
+    if (!native || typeof native.getValueWithKeyAsync !== 'function') return null;
     const loaded = require('expo-secure-store');
     if (typeof loaded.getItemAsync !== 'function' || typeof loaded.setItemAsync !== 'function') return null;
     return loaded;

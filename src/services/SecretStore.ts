@@ -15,7 +15,15 @@ const indexKey = (appId: string) => `@secret_index_${appId}`;
 // SecureStore keys only allow [A-Za-z0-9._-]
 const secureKey = (appId: string, k: string) => `ea_${appId.replace(/[^A-Za-z0-9._-]/g, '_')}_${k}`;
 
-const Secure: any = (() => { try { return requireOptionalNativeModule('ExpoSecureStore'); } catch { return null; } })();
+const Secure: any = (() => {
+  try {
+    const mod = requireOptionalNativeModule('ExpoSecureStore');
+    if (!mod || typeof mod.getValueWithKeyAsync !== 'function') return null;
+    return mod;
+  } catch {
+    return null;
+  }
+})();
 export const secretsEncrypted = () => !!Secure;
 
 function check(k: string) { if (!KEY_RE.test(String(k))) throw new Error(`Ungültiger Secret-Key: ${k}`); }

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, createElement } from 'react';
 import { View, StyleSheet, StatusBar, BackHandler, ActivityIndicator, Text, ScrollView, TouchableOpacity, Platform, Dimensions, AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import WebView, { WebViewMessageEvent } from 'react-native-webview';
@@ -42,7 +42,15 @@ interface MiniAppRunnerProps {
 }
 
 const MiniAppRunnerBase: React.FC<MiniAppRunnerProps> = ({ app, onClose }) => {
-  const webViewRef = useRef<WebView<any>>(null);
+  const webViewRef = useRef<{ injectJavaScript: (js: string) => void } | null>(null);
+  const frameRef = useRef<HTMLIFrameElement | null>(null);
+  if (Platform.OS === 'web') {
+    webViewRef.current = {
+      injectJavaScript: (js: string) => {
+        (frameRef.current?.contentWindow as (Window & { eval: (code: string) => unknown }) | null)?.eval(js);
+      },
+    };
+  }
   const [loading, setLoading] = useState(true);
   const [html, setHtml] = useState<string>('');
   const [showPermissionModal, setShowPermissionModal] = useState(false);
@@ -85,6 +93,17 @@ const MiniAppRunnerBase: React.FC<MiniAppRunnerProps> = ({ app, onClose }) => {
   }, [app.id]);
 
   const webLoadedRef = useRef(false);
+  const onBridgeMessage = useRef<(event: WebViewMessageEvent) => void>(() => {});
+  useEffect(() => {
+    if (Platform.OS !== 'web') return undefined;
+    const onMsg = (event: MessageEvent) => {
+      const payload = event.data;
+      if (!payload || payload.source !== 'openscr-miniapp' || typeof payload.data !== 'string') return;
+      onBridgeMessage.current({ nativeEvent: { data: payload.data } } as WebViewMessageEvent);
+    };
+    window.addEventListener('message', onMsg);
+    return () => window.removeEventListener('message', onMsg);
+  }, []);
   const deliverDeepLink = () => {
     if (!webLoadedRef.current) return;
     const link = takeDeepLink(app.id);
@@ -108,7 +127,7 @@ const MiniAppRunnerBase: React.FC<MiniAppRunnerProps> = ({ app, onClose }) => {
       setLoading(false);
     });
 
-    ScreenOrientation.unlockAsync();
+    if (Platform.OS !== 'web') ScreenOrientation.unlockAsync().catch(() => {});
 
     const backSub = BackHandler.addEventListener('hardwareBackPress', () => {
       applyShowOverLock(false);
@@ -119,7 +138,7 @@ const MiniAppRunnerBase: React.FC<MiniAppRunnerProps> = ({ app, onClose }) => {
     return () => {
       backSub.remove();
       removeGlobalErrorHandler();
-      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+      if (Platform.OS !== 'web') ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
       if (capabilitiesRef.current) {
         capabilitiesRef.current.cleanup();
       }
@@ -269,19 +288,22 @@ const MiniAppRunnerBase: React.FC<MiniAppRunnerProps> = ({ app, onClose }) => {
       const bridgeScript = bridgeHandler.generateBridgeScript();
       const hashLine = hash ? `location.hash=${JSON.stringify(hash)};` : '';
 
+      const webBridge = Platform.OS === 'web'
+        ? `window.ReactNativeWebView=window.ReactNativeWebView||{postMessage:function(data){parent.postMessage({source:'openscr-miniapp',data:String(data)},'*');}};`
+        : '';
       const fullHtml = `
         <!DOCTYPE html>
         <html>
         <head>
           <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
           <style>
-            html, body { margin: 0; padding: 0; }
+            html, body { margin: 0; padding: 0; height: 100%; }
             html { overflow-x: hidden; }
             * { -webkit-tap-highlight-color: transparent; }
           </style>
         </head>
         <body>
-          <script>${bridgeScript}
+          <script>${webBridge}${bridgeScript}
           ${assetRuntimeSource(host)}
           ${hashLine}</script>
           ${rewritten}
@@ -368,6 +390,7 @@ const MiniAppRunnerBase: React.FC<MiniAppRunnerProps> = ({ app, onClose }) => {
       });
     }
   };
+  onBridgeMessage.current = handleMessage;
 
   const handleWebViewError = (event: any) => {
     console.error('WebView error:', event.nativeEvent);
@@ -448,9 +471,17 @@ const MiniAppRunnerBase: React.FC<MiniAppRunnerProps> = ({ app, onClose }) => {
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#2196F3" />
         </View>
+      ) : Platform.OS === 'web' ? (
+        createElement('iframe', {
+          ref: frameRef,
+          title: app.manifest.name,
+          srcDoc: html,
+          style: { border: 0, width: '100%', height: '100%', background: '#0B0B0F' },
+          onLoad: () => { webLoadedRef.current = true; setLoading(false); setTimeout(deliverDeepLink, 300); },
+        })
       ) : (
         <WebView
-          ref={webViewRef}
+          ref={(node) => { webViewRef.current = node; }}
           source={(htmlSource.current = stableWebViewHtml(htmlSource.current, html))}
           style={styles.webview}
           onMessage={handleMessage}
