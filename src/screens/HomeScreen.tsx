@@ -23,6 +23,7 @@ import { AppInfoModal } from '../components/AppInfoModal';
 import { LegalModal } from '../components/LegalModal';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { bundledBlocklistFile, bundledCatalogFile, loadPolicyLists } from '../services/remoteLists';
+import { devFolderFor, devFoldersEnabled, setDevFolder } from '../services/devFolder';
 import {
   REPORT_EMAIL,
   blockReasonFor,
@@ -382,6 +383,10 @@ export const HomeScreen: React.FC = () => {
   };
 
   const [actionApp, setActionApp] = useState<MiniApp | null>(null);
+  const [folderDraft, setFolderDraft] = useState('');
+  useEffect(() => {
+    setFolderDraft(actionApp ? devFolderFor(actionApp.id) : '');
+  }, [actionApp]);
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
 
   const handleRefreshApp = async (app: MiniApp) => {
@@ -512,6 +517,7 @@ export const HomeScreen: React.FC = () => {
           <Text style={[styles.tileName, { color: tokens.text }]} numberOfLines={2}>{app.manifest.name}</Text>
           {locked ? <Text style={[styles.tileMeta, { color: tokens.muted }]} numberOfLines={1}>Gesperrt</Text> : null}
           {!locked && folder ? <Text style={[styles.tileMeta, { color: tokens.muted }]} numberOfLines={1}>{folder.name}</Text> : null}
+          {devFolderFor(app.id) ? <Text style={[styles.tileMeta, { color: tokens.lime }]} numberOfLines={1}>Lokaler Ordner</Text> : null}
         </View>
       </TouchableOpacity>
     );
@@ -822,10 +828,40 @@ export const HomeScreen: React.FC = () => {
       <SourceCodeModal app={sourceApp} visible={!!sourceApp} onClose={() => setSourceApp(null)} />
 
       <Modal visible={!!actionApp} transparent animationType="fade" onRequestClose={() => setActionApp(null)}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setActionApp(null)}>
-          <View style={[styles.sheet, { backgroundColor: tokens.card }]}>
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setActionApp(null)} />
+          <View style={[styles.sheet, { backgroundColor: tokens.card, zIndex: 1 }]}>
             <Text style={[styles.modalTitle, { color: tokens.text }]}>{actionApp?.manifest.name}</Text>
             <Text selectable style={[styles.sheetUrl, { color: tokens.muted, backgroundColor: tokens.bg }]}>{actionApp?.repoUrl}</Text>
+            {devFoldersEnabled() && actionApp ? (
+              <View style={styles.devFolder}>
+                <Text style={[styles.tileMeta, { color: tokens.muted }]}>Lokaler Ordner</Text>
+                <TextInput
+                  value={folderDraft}
+                  onChangeText={setFolderDraft}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  placeholder="E:\git_projects\mobile_apps\GuessTheSongScrapp"
+                  placeholderTextColor={tokens.muted}
+                  style={[styles.devFolderInput, { color: tokens.text, borderColor: tokens.line, backgroundColor: tokens.bg }]}
+                />
+                <TouchableOpacity
+                  style={styles.sheetRow}
+                  onPress={() => {
+                    setDevFolder(actionApp.id, folderDraft);
+                    notify(
+                      'Ordner',
+                      folderDraft.trim()
+                        ? 'Die App liest jetzt aus diesem Ordner.'
+                        : 'Kein Ordner eingetragen. Der GitHub-Stand wird wieder genutzt.',
+                    );
+                    setActionApp(null);
+                  }}
+                >
+                  <Text style={{ fontSize: 16, color: tokens.lime }}>Ordner übernehmen</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
             {[
               { label: 'Info und Berechtigungen', fn: (a: MiniApp) => setInfoApp(a) },
               ...(ownReposOnly ? [{ label: 'Quelltext', fn: (a: MiniApp) => setSourceApp(a) }] : []),
@@ -846,13 +882,15 @@ export const HomeScreen: React.FC = () => {
               </TouchableOpacity>
             ))}
           </View>
-        </TouchableOpacity>
+        </View>
       </Modal>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
+  devFolder: { paddingHorizontal: 4, paddingBottom: 8 },
+  devFolderInput: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, marginTop: 6, fontSize: 14 },
   container: { flex: 1 },
   header: {
     paddingTop: 54,

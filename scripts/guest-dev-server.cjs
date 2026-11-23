@@ -4,7 +4,9 @@
  */
 const http = require('http');
 const crypto = require('crypto');
+const fs = require('fs');
 const os = require('os');
+const path = require('path');
 
 if (global.__openscrGuestDev) {
   module.exports = global.__openscrGuestDev;
@@ -84,6 +86,94 @@ if (global.__openscrGuestDev) {
     return rooms.get(token) || null;
   }
 
+  function loopback(req) {
+    const ip = req.socket.remoteAddress || '';
+    return ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+  }
+
+  const MIME = {
+    html: 'text/html; charset=utf-8', htm: 'text/html; charset=utf-8',
+    js: 'text/javascript; charset=utf-8', mjs: 'text/javascript; charset=utf-8',
+    css: 'text/css; charset=utf-8', json: 'application/json',
+    svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
+    gif: 'image/gif', webp: 'image/webp', mp3: 'audio/mpeg', wav: 'audio/wav',
+    txt: 'text/plain; charset=utf-8', webmanifest: 'application/manifest+json',
+  };
+
+  function safeRoot(raw) {
+    const root = path.resolve(String(raw || ''));
+    if (!path.isAbsolute(root)) return null;
+    let stat;
+    try { stat = fs.statSync(root); } catch { return null; }
+    if (!stat.isDirectory()) return null;
+    return root;
+  }
+
+  function inside(root, rel) {
+    const clean = String(rel || '').replace(/\\/g, '/');
+    if (clean.split('/').some((part) => part === '..' || part === '.')) return null;
+    const full = path.resolve(root, clean);
+    const prefix = root.endsWith(path.sep) ? root : root + path.sep;
+    if (full !== root && !full.startsWith(prefix)) return null;
+    return full;
+  }
+
+  function walk(root, dir, out) {
+    if (out.length > 400) return;
+    for (const name of fs.readdirSync(dir)) {
+      if (name === 'node_modules' || name === '.git' || name.startsWith('.')) continue;
+      const full = path.join(dir, name);
+      const stat = fs.statSync(full);
+      if (stat.isDirectory()) walk(root, full, out);
+      else if (stat.isFile() && stat.size <= 8_000_000) {
+        out.push({ rel: path.relative(root, full).split(path.sep).join('/'), mtime: stat.mtimeMs, size: stat.size });
+      }
+    }
+  }
+
+  function serveDevDir(req, res, url) {
+    if (!loopback(req)) {
+      res.writeHead(403, { 'content-type': 'text/plain; charset=utf-8' });
+      res.end('Nur von diesem Rechner.');
+      return true;
+    }
+    const root = safeRoot(url.searchParams.get('root'));
+    if (!root) {
+      res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+      res.end('Diesen Ordner gibt es auf dem PC nicht. Pfad prüfen.');
+      return true;
+    }
+    const files = [];
+    walk(root, root, files);
+    const stamp = crypto.createHash('sha1').update(files.map((file) => `${file.rel}:${file.mtime}:${file.size}`).join('\n')).digest('hex');
+    if (url.searchParams.get('list') === '1') {
+      res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+      res.end(JSON.stringify({ stamp, files: files.map((file) => file.rel) }));
+      return true;
+    }
+    const rel = url.searchParams.get('rel') || '';
+    const full = inside(root, rel);
+    if (!full) {
+      res.writeHead(403, { 'content-type': 'text/plain; charset=utf-8' });
+      res.end('Pfad abgelehnt.');
+      return true;
+    }
+    let body;
+    try { body = fs.readFileSync(full); } catch {
+      res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+      res.end('Nicht gefunden.');
+      return true;
+    }
+    const ext = path.extname(full).slice(1).toLowerCase();
+    const mime = MIME[ext] || 'application/octet-stream';
+    const text = mime.startsWith('text/') || mime.includes('javascript') || mime.includes('json') || mime.includes('svg')
+      ? body.toString('utf8')
+      : null;
+    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+    res.end(JSON.stringify({ mime, base64: body.toString('base64'), text, stamp }));
+    return true;
+  }
+
   const server = http.createServer((req, res) => {
     const url = new URL(req.url || '/', 'http://127.0.0.1');
     res.setHeader('access-control-allow-origin', '*');
@@ -92,6 +182,10 @@ if (global.__openscrGuestDev) {
     if (req.method === 'OPTIONS') {
       res.writeHead(204);
       res.end();
+      return;
+    }
+    if (req.method === 'GET' && url.pathname === '/openscr-dev-dir') {
+      serveDevDir(req, res, url);
       return;
     }
     if (req.method === 'POST' && url.pathname === '/openscr-dev-guest') {

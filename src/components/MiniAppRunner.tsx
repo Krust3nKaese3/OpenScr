@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import WebView, { WebViewMessageEvent } from 'react-native-webview';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { getInfoAsync, listAppFiles, readAsStringAsync } from '../services/appFiles';
+import { devFolderFor, listDevFiles, readDevAsset } from '../services/devFolder';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Clipboard from 'expo-clipboard';
 import { MiniApp, Permission } from '../types';
@@ -154,9 +155,9 @@ const MiniAppRunnerBase: React.FC<MiniAppRunnerProps> = ({ app, onClose }) => {
     try { entry = normalizeEntrypoint(app.manifest.entrypoint); } catch { entry = 'index.html'; }
     setGuestContent(app.id, {
       entry,
-      list: () => listAppFiles(app.localPath),
+      list: async () => (await listDevFiles(app.id))?.files || listAppFiles(app.localPath),
       read: async (rel) => {
-        const file = await readMiniAppAsset(app.localPath, rel || entry);
+        const file = await readMiniAppAsset(app.id, app.localPath, rel || entry);
         if (!file) return null;
         const body = file.text != null ? new TextEncoder().encode(file.text) : decodeBase64(file.base64);
         return { mime: file.mime, body };
@@ -269,12 +270,13 @@ const MiniAppRunnerBase: React.FC<MiniAppRunnerProps> = ({ app, onClose }) => {
       const entryDir = parentDir(entryRel);
       baseDirRef.current = entryDir;
       docRef.current = entryRel;
-      const htmlContent = await readAsStringAsync(entryUri);
+      const fromFolder = await readDevAsset(app.id, entryRel);
+      const htmlContent = fromFolder?.text != null ? fromFolder.text : await readAsStringAsync(entryUri);
       const cache = new Map<string, Promise<{ mime: string; base64: string; text: string | null } | null>>();
       const host = virtualHost(app.id);
       const rewritten = await rewriteHtmlAssets(htmlContent, entryDir, host, (rel) => {
         if (!isStoredRelPath(rel)) return Promise.resolve(null);
-        const pending = cache.get(rel) || readMiniAppAsset(app.localPath, rel);
+        const pending = cache.get(rel) || readMiniAppAsset(app.id, app.localPath, rel);
         cache.set(rel, pending);
         return pending;
       });
@@ -324,6 +326,31 @@ const MiniAppRunnerBase: React.FC<MiniAppRunnerProps> = ({ app, onClose }) => {
     }
   };
 
+  const reloadRef = useRef(loadApp);
+  reloadRef.current = loadApp;
+  useEffect(() => {
+    if (!devFolderFor(app.id)) return undefined;
+    let seen = '';
+    let stop = false;
+    const tick = async () => {
+      try {
+        const listed = await listDevFiles(app.id);
+        if (stop || !listed || listed.stamp === seen) return;
+        const first = seen === '';
+        seen = listed.stamp;
+        if (!first) await reloadRef.current(grantedRef.current);
+      } catch (error) {
+        console.warn('[openscr-dev]', error instanceof Error ? error.message : error);
+      }
+    };
+    void tick();
+    const timer = setInterval(() => { void tick(); }, 1000);
+    return () => {
+      stop = true;
+      clearInterval(timer);
+    };
+  }, [app.id]);
+
   const navigateLocal = async (raw: string) => {
     const hashAt = raw.indexOf('#');
     const before = hashAt >= 0 ? raw.slice(0, hashAt) : raw;
@@ -356,7 +383,7 @@ const MiniAppRunnerBase: React.FC<MiniAppRunnerProps> = ({ app, onClose }) => {
           webViewRef.current?.injectJavaScript(`window.handleBridgeResponse(${JSON.stringify({ id: message.id, success: false, error: 'Asset path is outside the mini-app' })}); true;`);
           return;
         }
-        const file = await readMiniAppAsset(app.localPath, rel);
+        const file = await readMiniAppAsset(app.id, app.localPath, rel);
         const payload = file
           ? { id: message.id, success: true, result: { mime: file.mime, base64: file.base64 } }
           : { id: message.id, success: false, error: 'Asset not found' };
@@ -580,7 +607,11 @@ function decodeBase64(value: string): Uint8Array {
   return out;
 }
 
-async function readMiniAppAsset(localPath: string, rel: string): Promise<{ mime: string; base64: string; text: string | null } | null> {
+async function readMiniAppAsset(appId: string, localPath: string, rel: string): Promise<{ mime: string; base64: string; text: string | null } | null> {
+  if (devFolderFor(appId)) {
+    const fromFolder = await readDevAsset(appId, rel);
+    return fromFolder ? { mime: fromFolder.mime, base64: fromFolder.base64, text: fromFolder.text } : null;
+  }
   const uri = assetUri(localPath, rel);
   if (!uri) return null;
   const info = await getInfoAsync(uri);
