@@ -17,7 +17,7 @@ import {
   PRODUCTION_PLAY_SIGNING_SHA1,
   PRODUCTION_UPLOAD_SHA1,
   SPOTIFY_DASHBOARD_URL,
-  SPOTIFY_REDIRECT_URI,
+  spotifyRedirectUri,
   readRunningAndroidPackage,
   spotifyAndroidDashboardTarget,
   SpotifyAndroidDashboardTarget,
@@ -87,7 +87,7 @@ export const SpotifyClientIdTutorial: React.FC<Props> = ({ visible, onClose }) =
 
             <Step n={4} title="Redirect URI">
               <Text style={styles.body}>Trag exakt diese Adresse ein.</Text>
-              <CopyValue label="Redirect URI" value={SPOTIFY_REDIRECT_URI} />
+              <CopyValue label="Redirect URI" value={spotifyRedirectUri()} />
             </Step>
 
             <Step n={5} title="Bundle IDs leer lassen">
@@ -159,8 +159,9 @@ function VariantBlock({
     return (
       <View>
         <Text style={styles.body}>
-          Du nutzt gerade SrvOpenScr (Development, APP_VARIANT=development).
-          Der SHA-1 ist der öffentliche Fingerabdruck des Debug-Keystores, mit dem diese SrvOpenScr-APK signiert ist.
+          Du nutzt gerade OpenScr Dev (APP_VARIANT=dev).
+          Die Redirect-URI ist {spotifyRedirectUri()}.
+          Der SHA-1 ist der öffentliche Fingerabdruck des Debug-Keystores, mit dem diese OpenScr-Dev-APK signiert ist.
           Ohne Doppelpunkte gilt derselbe Wert auch. Zum Kopieren ist die Form mit Doppelpunkten, so wie das Dashboard-Feld sie zeigt.
         </Text>
         <CopyValue label="Package name" value={target.packageName} />
@@ -188,7 +189,7 @@ function VariantBlock({
         {target.packageName ? ` (gelesener Paketname: ${target.packageName})` : ''}.
         Trag die Werte der App ein, die auf diesem Handy installiert ist.
       </Text>
-      <Text style={styles.subhead}>SrvOpenScr, Development</Text>
+      <Text style={styles.subhead}>OpenScr Dev</Text>
       <CopyValue label="Package name" value={dev.packageName || DEVELOPMENT_ANDROID_PACKAGE} />
       {dev.sha1 ? <CopyValue label="Package SHA1 fingerprint" value={dev.sha1} /> : null}
       <Text style={styles.subhead}>OpenScr, Production</Text>

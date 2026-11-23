@@ -1,13 +1,41 @@
 /** Spotify Client-ID helpers. Precedence and wording are mirrored in the Kotlin module. */
 
-export const SPOTIFY_REDIRECT_URI = 'openscr://spotify-callback';
+export const PRODUCTION_SCHEME = 'openscr';
+export const DEVELOPMENT_SCHEME = 'openscrdev';
+
+/** Redirect for one scheme. Production is openscr://, OpenScr Dev is openscrdev://. */
+export function spotifyRedirectForScheme(scheme: string): string {
+  const clean = String(scheme || PRODUCTION_SCHEME).trim().replace(/:.*/, '') || PRODUCTION_SCHEME;
+  return `${clean}://spotify-callback`;
+}
+
+/** Scheme baked into this build by app.config.js. Tests and production stay on openscr. */
+export function activeAppScheme(): string {
+  try {
+    const Constants = require('expo-constants').default;
+    const raw = Constants?.expoConfig?.scheme ?? Constants?.manifest?.scheme;
+    const list = Array.isArray(raw) ? raw : [raw];
+    const custom = list.find((item) => item && !String(item).startsWith('exp+'));
+    if (custom) return String(custom);
+  } catch {
+    /* Node tests have no Expo config. */
+  }
+  return PRODUCTION_SCHEME;
+}
+
+export function spotifyRedirectUri(): string {
+  return spotifyRedirectForScheme(activeAppScheme());
+}
+
+/** Production redirect. Screens that follow the running build call spotifyRedirectUri(). */
+export const SPOTIFY_REDIRECT_URI = spotifyRedirectForScheme(PRODUCTION_SCHEME);
 
 export const SPOTIFY_DASHBOARD_URL = 'https://developer.spotify.com/dashboard';
 
-/** Production package from app.json. app.config.js keeps this when APP_VARIANT is not "development". */
+/** Production package from app.json. app.config.js keeps this when APP_VARIANT is unset. */
 export const PRODUCTION_ANDROID_PACKAGE = 'com.openscr.app';
 
-/** SrvOpenScr. app.config.js appends ".dev" when APP_VARIANT=development. */
+/** OpenScr Dev. app.config.js appends ".dev" when APP_VARIANT is dev or development. */
 export const DEVELOPMENT_ANDROID_PACKAGE = 'com.openscr.app.dev';
 
 /**
@@ -70,7 +98,7 @@ export function spotifyAndroidDashboardTarget(packageName: unknown): SpotifyAndr
   if (pkg === DEVELOPMENT_ANDROID_PACKAGE) {
     return {
       variant: 'development',
-      appName: 'SrvOpenScr',
+      appName: 'OpenScr Dev',
       packageName: pkg,
       sha1: DEVELOPMENT_DEBUG_SHA1,
       sha1s: [DEVELOPMENT_DEBUG_SHA1],

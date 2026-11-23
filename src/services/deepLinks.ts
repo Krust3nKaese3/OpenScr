@@ -1,11 +1,12 @@
 /**
- * Generic deep links: openscr://<openscrapp>/<path>?query (also exp+openscr://… on dev-client builds).
+ * Generic deep links: openscr://<openscrapp>/<path>?query.
+ * OpenScr Dev uses openscrdev://. Dev-client builds also accept exp+openscr://.
  * Host `add` is reserved for installing an OpenScrapp (openscr://add?url=<encoded GitHub URL>) and is
  * not an OpenScrapp name. Pure parsing + a tiny pending-link queue consumed by MiniAppRunner.
  */
 export interface DeepLink { miniapp: string; path: string; params: Record<string, string>; url: string }
 
-const SCHEMES = ['openscr:', 'exp+openscr:'];
+const SCHEMES = ['openscr:', 'openscrdev:', 'exp+openscr:'];
 /** Reserved host: install link, never routed as a mini-app. */
 export const ADD_LINK_HOST = 'add';
 /** Reserved host: lock-screen notice opens this installed OpenScrapp by id. */

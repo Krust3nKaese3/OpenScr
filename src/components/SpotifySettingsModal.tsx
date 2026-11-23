@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { SPOTIFY_REDIRECT_URI, spotifyClientIdSourceLabel } from '../services/spotifyClientId';
+import { spotifyClientIdSourceLabel, spotifyRedirectUri } from '../services/spotifyClientId';
 import { getSpotifyClientId, setSpotifySettingsClientId } from '../services/spotifySettings';
 import { SpotifyClientIdTutorial } from './SpotifyClientIdTutorial';
 
@@ -86,7 +86,7 @@ export const SpotifySettingsModal: React.FC<Props> = ({ visible, onClose }) => {
               editable={!busy}
             />
             <Text selectable style={styles.meta}>Aktiv: {active}</Text>
-            <Text selectable style={styles.meta}>Redirect-URI: {SPOTIFY_REDIRECT_URI}</Text>
+            <Text selectable style={styles.meta}>Redirect-URI: {spotifyRedirectUri()}</Text>
             {busy ? <ActivityIndicator style={{ marginVertical: 8 }} /> : null}
             <View style={styles.row}>
               <TouchableOpacity style={styles.secondary} onPress={() => save('')} disabled={busy}>

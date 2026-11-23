@@ -5,6 +5,7 @@ const {
   MISSING_SPOTIFY_CLIENT_ID,
   BAD_SPOTIFY_CLIENT_ID,
   SPOTIFY_REDIRECT_URI,
+  spotifyRedirectForScheme,
   SPOTIFY_DASHBOARD_URL,
   DEVELOPMENT_ANDROID_PACKAGE,
   PRODUCTION_ANDROID_PACKAGE,
@@ -73,6 +74,8 @@ test('client id format', () => {
   assert.throws(() => normalizeSpotifyClientId(''), new RegExp(MISSING_SPOTIFY_CLIENT_ID));
   assert.throws(() => normalizeSpotifyClientId('not-a-client-id'), new RegExp(BAD_SPOTIFY_CLIENT_ID));
   assert.strictEqual(SPOTIFY_REDIRECT_URI, 'openscr://spotify-callback');
+  assert.strictEqual(spotifyRedirectForScheme('openscr'), 'openscr://spotify-callback');
+  assert.strictEqual(spotifyRedirectForScheme('openscrdev'), 'openscrdev://spotify-callback');
 });
 
 test('dashboard package and sha-1 follow the running variant', () => {
@@ -86,7 +89,7 @@ test('dashboard package and sha-1 follow the running variant', () => {
 
   const dev = spotifyAndroidDashboardTarget(DEVELOPMENT_ANDROID_PACKAGE);
   assert.strictEqual(dev.variant, 'development');
-  assert.strictEqual(dev.appName, 'SrvOpenScr');
+  assert.strictEqual(dev.appName, 'OpenScr Dev');
   assert.strictEqual(dev.packageName, DEVELOPMENT_ANDROID_PACKAGE);
   assert.strictEqual(dev.sha1, DEVELOPMENT_DEBUG_SHA1);
   assert.deepStrictEqual(dev.sha1s, [DEVELOPMENT_DEBUG_SHA1]);

@@ -40,7 +40,6 @@ import java.util.concurrent.Executors
  * The client id is read from [SpotifyClientIdStore] on every login/connect/play.
  */
 object SpotifyRuntime {
-  const val REDIRECT_URI = "openscr://spotify-callback"
   private const val REQUEST_CODE = 48151
   private val SCOPES = arrayOf(
     "app-remote-control",
@@ -96,7 +95,7 @@ object SpotifyRuntime {
 
   private fun lockAware(ctx: Context, message: String): String {
     if (!keyguardLocked(ctx)) return message
-    if (message == SpotifyText.NOT_AUTHORIZED || message == SpotifyText.AUTH_FAILED || message == SpotifyText.NOT_LOGGED_IN) {
+    if (message == SpotifyText.NOT_AUTHORIZED || message == SpotifyText.authFailed(ctx) || message == SpotifyText.NOT_LOGGED_IN) {
       return SpotifyText.AUTH_NEEDS_UNLOCK
     }
     return message
@@ -196,7 +195,7 @@ object SpotifyRuntime {
         pendingLogin?.reject("E_SPOTIFY", SpotifyText.AUTH_CANCELLED, null)
         pendingPkce = pkce
         pendingLogin = promise
-        val request = AuthorizationRequest.Builder(clientId, AuthorizationResponse.Type.CODE, REDIRECT_URI)
+        val request = AuthorizationRequest.Builder(clientId, AuthorizationResponse.Type.CODE, SpotifyText.redirectUri(ctx))
           .setScopes(SCOPES)
           .setPkceInformation(pkce)
           .build()
@@ -208,7 +207,7 @@ object SpotifyRuntime {
           pendingLogin = null
           pendingPkce = null
         }
-        fail(promise, SpotifyText.AUTH_FAILED + " (" + (e.message ?: e.javaClass.simpleName) + ")", e)
+        fail(promise, SpotifyText.authFailed(ctx) + " (" + (e.message ?: e.javaClass.simpleName) + ")", e)
       }
     }
   }
@@ -229,7 +228,7 @@ object SpotifyRuntime {
       AuthorizationClient.getResponse(resultCode, data)
     } catch (e: Throwable) {
       if (ctx != null) SpotifyLog.add(ctx, "Login-Antwort ungültig: ${e.javaClass.simpleName}")
-      promise.reject("E_SPOTIFY", SpotifyText.AUTH_FAILED, e)
+      promise.reject("E_SPOTIFY", if (ctx != null) SpotifyText.authFailed(ctx) else "Spotify-Anmeldung fehlgeschlagen.", e)
       return
     }
     if (ctx != null) SpotifyLog.add(ctx, "Login-Antwort: ${response.type}")
@@ -238,18 +237,19 @@ object SpotifyRuntime {
       AuthorizationResponse.Type.TOKEN -> storeLibraryToken(promise, response)
       AuthorizationResponse.Type.CANCELLED -> promise.reject("E_SPOTIFY", SpotifyText.AUTH_CANCELLED, null)
       AuthorizationResponse.Type.ERROR -> {
-        val msg = if (response.error == "access_denied") SpotifyText.AUTH_DENIED else SpotifyText.AUTH_FAILED + " (" + (response.error ?: "error") + ")"
+        val failed = if (ctx != null) SpotifyText.authFailed(ctx) else "Spotify-Anmeldung fehlgeschlagen."
+        val msg = if (response.error == "access_denied") SpotifyText.AUTH_DENIED else failed + " (" + (response.error ?: "error") + ")"
         if (ctx != null) SpotifyLog.add(ctx, msg)
         promise.reject("E_SPOTIFY", msg, null)
       }
-      else -> promise.reject("E_SPOTIFY", SpotifyText.AUTH_FAILED, null)
+      else -> promise.reject("E_SPOTIFY", if (ctx != null) SpotifyText.authFailed(ctx) else "Spotify-Anmeldung fehlgeschlagen.", null)
     }
   }
 
   private fun storeLibraryToken(promise: Promise, response: AuthorizationResponse) {
     val access = response.accessToken
     if (access.isNullOrBlank()) {
-      promise.reject("E_SPOTIFY", SpotifyText.AUTH_FAILED, null)
+      promise.reject("E_SPOTIFY", SpotifyText.authFailed(ctx()), null)
       return
     }
     val ctx = ctx()
@@ -260,14 +260,14 @@ object SpotifyRuntime {
 
   private fun exchange(promise: Promise, code: String?, verifier: String?) {
     io.execute {
+      val ctx = ctx()
       try {
-        val ctx = ctx()
         if (code.isNullOrBlank() || verifier.isNullOrBlank()) throw SpotifyUserException("PKCE-Verifier fehlt. Bitte die Anmeldung erneut starten.")
         val clientId = SpotifyClientIdStore.require(ctx)
         val request = TokenExchangeRequest.Builder()
           .setClientId(clientId)
           .setCode(code)
-          .setRedirectUri(REDIRECT_URI)
+          .setRedirectUri(SpotifyText.redirectUri(ctx))
           .setCodeVerifier(verifier)
           .build()
         val result = request.execute()
@@ -280,7 +280,7 @@ object SpotifyRuntime {
         SpotifyLog.add(ctx, "PKCE-Token gespeichert (Refresh ${!result.refreshToken.isNullOrBlank()})")
         promise.resolve(mapOf("authorized" to true, "hasRefreshToken" to !result.refreshToken.isNullOrBlank()))
       } catch (e: SpotifyUserException) {
-        fail(promise, e.message ?: SpotifyText.AUTH_FAILED, e)
+        fail(promise, e.message ?: SpotifyText.authFailed(ctx), e)
       } catch (e: Throwable) {
         fail(promise, "Spotify-Token-Tausch fehlgeschlagen: ${e.message ?: e.javaClass.simpleName}", e)
       }
@@ -402,7 +402,7 @@ object SpotifyRuntime {
     if (!start) return
     SpotifyLog.add(ctx, "App Remote connect (Auth-View=$showAuth)")
     val params = ConnectionParams.Builder(clientId)
-      .setRedirectUri(REDIRECT_URI)
+      .setRedirectUri(SpotifyText.redirectUri(ctx))
       .showAuthView(showAuth)
       .build()
     SpotifyAppRemote.connect(ctx, params, object : Connector.ConnectionListener {
@@ -864,7 +864,7 @@ object SpotifyRuntime {
       error is CouldNotFindSpotifyApp || blob.contains("CouldNotFindSpotifyApp") -> SpotifyText.NOT_INSTALLED
       error is NotLoggedInException || reason == AppProtocol.ErrorUri.ERROR_NOT_LOGGED_IN -> SpotifyText.NOT_LOGGED_IN
       error is UserNotAuthorizedException || reason == AppProtocol.ErrorUri.ERROR_USER_NOT_AUTHORIZED -> SpotifyText.NOT_AUTHORIZED
-      error is AuthenticationFailedException || reason == AppProtocol.ErrorUri.ERROR_AUTHENTICATION_FAILED -> SpotifyText.AUTH_FAILED
+      error is AuthenticationFailedException || reason == AppProtocol.ErrorUri.ERROR_AUTHENTICATION_FAILED -> SpotifyText.authFailed(ctx)
       error is OfflineModeException || reason == AppProtocol.ErrorUri.ERROR_OFFLINE_MODE_ACTIVE -> SpotifyText.OFFLINE
       error is SpotifyDisconnectedException || error is SpotifyConnectionTerminatedException -> SpotifyText.DISCONNECTED
       reason == AppProtocol.ErrorUri.ERROR_INVALID_URI -> SpotifyText.BAD_URI

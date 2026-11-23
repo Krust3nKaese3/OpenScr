@@ -1,9 +1,10 @@
-// Extends app.json. The EAS "development" profile sets APP_VARIANT=development,
-// producing a separately installable dev-client app ("SrvOpenScr", package suffix .dev).
-// The dev-client deep link is exp+<slug> (exp+openscr). The custom scheme stays openscr.
+// Extends app.json. APP_VARIANT=dev (alias "development") builds "OpenScr Dev":
+// package com.openscr.app.dev and scheme openscrdev. Unset is production OpenScr.
+// The Expo dev-client link stays exp+<slug> (exp+openscr).
 // CATALOG_ONLY / EXPO_PUBLIC_CATALOG_ONLY=1 is an Android build switch.
 // iOS ignores it and runs own repositories only. That choice is in src/services/iosPolicy.ts.
-const IS_DEV = process.env.APP_VARIANT === 'development';
+const VARIANT = String(process.env.APP_VARIANT || '').trim().toLowerCase();
+const IS_DEV = VARIANT === 'dev' || VARIANT === 'development';
 const flagOn = (value) => ['1', 'true', 'yes'].includes(String(value || '').trim().toLowerCase());
 const CATALOG_ONLY = flagOn(process.env.CATALOG_ONLY) || flagOn(process.env.EXPO_PUBLIC_CATALOG_ONLY);
 if (CATALOG_ONLY) process.env.EXPO_PUBLIC_CATALOG_ONLY = process.env.EXPO_PUBLIC_CATALOG_ONLY || '1';
@@ -18,7 +19,8 @@ module.exports = ({ config }) => {
   const fromConfig = config.extra && config.extra.spotifyClientId;
   return {
     ...config,
-    name: IS_DEV ? 'SrvOpenScr' : 'OpenScr',
+    name: IS_DEV ? 'OpenScr Dev' : 'OpenScr',
+    scheme: IS_DEV ? 'openscrdev' : (config.scheme || 'openscr'),
     android: {
       ...config.android,
       package: IS_DEV ? `${config.android.package}.dev` : config.android.package,
