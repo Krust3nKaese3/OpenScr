@@ -4,7 +4,7 @@ import { appearanceMode, useContainerTheme } from './src/theme/containerTheme';
 import { initBackgroundTasks } from './src/services/BackgroundTasks';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
-import BleManager from 'react-native-ble-manager';
+import { WebDevPanel } from './src/components/WebDevPanel';
 import { Platform } from 'react-native';
 
 function Shell() {
@@ -13,6 +13,7 @@ function Shell() {
     <>
       <StatusBar style={appearanceMode() === 'light' ? 'dark' : 'light'} />
       <HomeScreen />
+      <WebDevPanel />
     </>
   );
 }
@@ -21,7 +22,8 @@ export default function App() {
   useEffect(() => { initBackgroundTasks(true); }, []);
   useEffect(() => {
     if (Platform.OS === 'android') {
-      BleManager.start({ showAlert: false }).catch((error) => {
+      const BleManager = require('react-native-ble-manager').default;
+      BleManager.start({ showAlert: false }).catch((error: unknown) => {
         console.error('BleManager start error:', error);
       });
     }

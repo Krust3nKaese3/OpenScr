@@ -6,7 +6,6 @@ import { Camera } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
 import { Accelerometer, Gyroscope } from 'expo-sensors';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import BleManager from 'react-native-ble-manager';
 import * as ClassicBluetooth from '../../modules/expo-classic-bluetooth';
 import { BluetoothDevice, HttpRequest, HttpResponse } from '../types';
 import { EventEmitter } from './EventEmitter';
@@ -20,6 +19,15 @@ import * as RawNet from '../../modules/expo-raw-net';
 import { makeTuyaLocal, discover as tuyaDiscover } from '../services/TuyaLocal';
 import { sendMediaKey } from '../../modules/expo-media-control';
 import { subscribeSpotify } from '../../modules/expo-spotify';
+import {
+  subscribeWebDev,
+  webBluetoothConnect,
+  webBluetoothConnected,
+  webBluetoothDisconnect,
+  webBluetoothScan,
+  webMedia,
+  webSpotify,
+} from '../services/webDevFixtures';
 import { SecretStore } from '../services/SecretStore';
 import {
   getSpotifyClientId,
@@ -88,6 +96,12 @@ export class NativeCapabilities {
     });
     this.appId = appId;
     this.eventEmitter = new EventEmitter();
+    if (Platform.OS === 'web') {
+      this.stopSpotify = subscribeWebDev((event, data) => {
+        this.eventEmitter.emit(event, data);
+      });
+      return;
+    }
     this.setupBluetoothListeners();
     this.stopSpotify = subscribeSpotify((event, data) => {
       if (event !== 'spotify.player') console.log('[EveryApp] spotify event', event, data?.message || data?.reason || '');
@@ -195,7 +209,9 @@ export class NativeCapabilities {
 
   bluetooth = {
     scan: async (): Promise<any[]> => {
+      if (Platform.OS === 'web') return webBluetoothScan();
       try {
+        const BleManager = require('react-native-ble-manager').default;
         await BleManager.scan({ scanDuration: 5 } as any);
         return new Promise((resolve) => {
           setTimeout(async () => {
@@ -210,15 +226,26 @@ export class NativeCapabilities {
     },
 
     connect: async (deviceId: string): Promise<void> => {
+      if (Platform.OS === 'web') {
+        webBluetoothConnect(deviceId);
+        return;
+      }
+      const BleManager = require('react-native-ble-manager').default;
       await BleManager.connect(deviceId);
     },
 
     disconnect: async (deviceId: string): Promise<void> => {
+      if (Platform.OS === 'web') {
+        webBluetoothDisconnect(deviceId);
+        return;
+      }
+      const BleManager = require('react-native-ble-manager').default;
       await BleManager.disconnect(deviceId);
     },
 
     // Throws (copyable message) instead of silently returning [] so mini-apps can show the error
     getConnectedDevices: async (includePaired?: boolean): Promise<any[]> => {
+      if (Platform.OS === 'web') return webBluetoothConnected(!!includePaired);
       try {
         return await ClassicBluetooth.getConnectedDevicesAsync(!!includePaired);
       } catch (error: any) {
@@ -401,7 +428,7 @@ export class NativeCapabilities {
     randomHex: async (n: number) => RawNet.nativeCrypto.randomHex(n),
   };
 
-  spotify = {
+  spotify = Platform.OS === 'web' ? webSpotify : {
     isAvailable: () => spotifyIsAvailable(),
     login: () => spotifyLogin(),
     logout: () => spotifyLogout(),
@@ -423,7 +450,14 @@ export class NativeCapabilities {
     getClientId: () => getSpotifyClientId(),
   };
 
-  media = {
+  media = Platform.OS === 'web' ? {
+    play: () => webMedia('play'),
+    pause: () => webMedia('pause'),
+    toggle: () => webMedia('toggle'),
+    next: () => webMedia('next'),
+    previous: () => webMedia('previous'),
+    stop: () => webMedia('stop'),
+  } : {
     play: () => sendMediaKey('play'),
     pause: () => sendMediaKey('pause'),
     toggle: () => sendMediaKey('toggle'),

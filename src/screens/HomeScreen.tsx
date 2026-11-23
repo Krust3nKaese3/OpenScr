@@ -5,7 +5,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   TextInput,
-  Alert,
   Modal,
   ScrollView,
   Platform,
@@ -45,10 +44,11 @@ import { SourceCodeModal } from '../components/SourceCodeModal';
 import { showsCuratedCatalog } from '../services/iosPolicy';
 import { appearanceMode, setAppearance, useContainerTheme } from '../theme/containerTheme';
 import { NavGlyph, ScrappGlyph } from '../components/ScrappGlyph';
+import { notify } from '../services/notify';
 
 function confirmForeign(message: string): Promise<boolean> {
   return new Promise((resolve) => {
-    Alert.alert('Unbekannte Quelle', message, [
+    notify('Unbekannte Quelle', message, [
       { text: 'Abbrechen', style: 'cancel', onPress: () => resolve(false) },
       { text: 'Trotzdem hinzufügen', style: 'destructive', onPress: () => resolve(true) },
     ]);
@@ -101,11 +101,11 @@ export const HomeScreen: React.FC = () => {
   const performAdd = async (raw: string, source: 'field' | 'link') => {
     const trimmed = raw.trim();
     if (!trimmed) {
-      Alert.alert('Fehler', 'Bitte eine Repository-URL eingeben.');
+      notify('Fehler', 'Bitte eine Repository-URL eingeben.');
       return;
     }
     if (source === 'link' && !isGitHubRepoUrl(trimmed)) {
-      Alert.alert('Add-Link', 'Der Add-Link enthält keine gültige GitHub-URL (https://github.com/besitzer/repo).');
+      notify('Add-Link', 'Der Add-Link enthält keine gültige GitHub-URL (https://github.com/besitzer/repo).');
       return;
     }
     const decision = decideAdd(trimmed, {
@@ -117,7 +117,7 @@ export const HomeScreen: React.FC = () => {
       signedInLogin: githubLogin,
     });
     if (decision.type === 'reject' || decision.type === 'blocked') {
-      Alert.alert(decision.title, decision.message);
+      notify(decision.title, decision.message);
       return;
     }
     if (decision.type === 'confirm-foreign') {
@@ -130,7 +130,7 @@ export const HomeScreen: React.FC = () => {
       if (key) {
         const existing = (await StorageService.getApps()).find((a) => githubRepoKey(a.repoUrl) === key);
         if (existing) {
-          Alert.alert('Bereits installiert', `${existing.manifest.name} ist schon installiert.`, [
+          notify('Bereits installiert', `${existing.manifest.name} ist schon installiert.`, [
             { text: 'OK', style: 'cancel' },
             { text: 'Öffnen', onPress: () => { void openAppRef.current(existing); } },
           ]);
@@ -139,7 +139,7 @@ export const HomeScreen: React.FC = () => {
       }
       const blockedNow = blockReasonFor('', trimmed, blocklist);
       if (blockedNow) {
-        Alert.alert('OpenScrapp gesperrt', blockedNow);
+        notify('OpenScrapp gesperrt', blockedNow);
         return;
       }
       let downloadToken: string | undefined;
@@ -159,16 +159,17 @@ export const HomeScreen: React.FC = () => {
       const blockedId = blockReasonFor(app.id, app.repoUrl, blocklist);
       if (blockedId) {
         await GitRepoService.deleteApp(app);
-        Alert.alert('OpenScrapp gesperrt', blockedId);
+        notify('OpenScrapp gesperrt', blockedId);
         return;
       }
       await StorageService.saveApp(app);
       await loadData();
       if (source === 'field') setRepoUrl('');
-      Alert.alert('Hinzugefügt', `${app.manifest.name} wurde hinzugefügt.`);
+      setTab('home');
+      notify('Hinzugefügt', `${app.manifest.name} wurde hinzugefügt.`);
     } catch (error: any) {
       await refreshSession();
-      Alert.alert('Fehler', error.message);
+      notify('Fehler', error.message);
     } finally {
       setLoading(false);
     }
@@ -206,7 +207,7 @@ export const HomeScreen: React.FC = () => {
           const entry = catalogEntryFor(a.repoUrl, catalogRef.current);
           return matchesMiniApp(link, a, entry ? catalogRepoNames(entry) : []);
         });
-        if (!target) { Alert.alert('Deep-Link', `OpenScrapp "${link.miniapp}" ist nicht installiert.\n\n${url}`); return; }
+        if (!target) { notify('Deep-Link', `OpenScrapp "${link.miniapp}" ist nicht installiert.\n\n${url}`); return; }
         queueDeepLink(target.id, link);
         await openAppRef.current(target);
       });
@@ -289,7 +290,7 @@ export const HomeScreen: React.FC = () => {
       granted = res.granted;
     }
     if (!granted) {
-      Alert.alert(
+      notify(
         'Kamera',
         'Ohne Kamerazugriff kann OpenScr keinen QR-Code scannen. Erlaube die Kamera in den Einstellungen.',
         [
@@ -309,7 +310,7 @@ export const HomeScreen: React.FC = () => {
     setScanning(false);
     const parsed = repoUrlFromQr(result.data);
     if (!parsed.ok) {
-      Alert.alert('QR-Code', parsed.message);
+      notify('QR-Code', parsed.message);
       return;
     }
     enqueue(() => performAdd(parsed.repoUrl, 'link'));
@@ -317,7 +318,7 @@ export const HomeScreen: React.FC = () => {
 
   const handleCreateFolder = async () => {
     if (!newFolderName.trim()) {
-      Alert.alert('Fehler', 'Bitte einen Ordnernamen eingeben.');
+      notify('Fehler', 'Bitte einen Ordnernamen eingeben.');
       return;
     }
 
@@ -334,7 +335,7 @@ export const HomeScreen: React.FC = () => {
   };
 
   const handleDeleteFolder = async (folderId: string) => {
-    Alert.alert(
+    notify(
       'Ordner löschen',
       'Apps in diesem Ordner wandern in die Übersicht. Fortfahren?',
       [
@@ -352,7 +353,7 @@ export const HomeScreen: React.FC = () => {
   };
 
   const handleMoveApp = (app: MiniApp, folderId: string | null) => {
-    Alert.alert('App verschieben', `${app.manifest.name} verschieben?`, [
+    notify('App verschieben', `${app.manifest.name} verschieben?`, [
       { text: 'Abbrechen', style: 'cancel' },
       {
         text: 'Verschieben',
@@ -365,7 +366,7 @@ export const HomeScreen: React.FC = () => {
   };
 
   const handleDeleteApp = (app: MiniApp) => {
-    Alert.alert('App löschen', `${app.manifest.name} und alle ihre gespeicherten Daten löschen?`, [
+    notify('App löschen', `${app.manifest.name} und alle ihre gespeicherten Daten löschen?`, [
       { text: 'Abbrechen', style: 'cancel' },
       {
         text: 'Löschen',
@@ -386,7 +387,7 @@ export const HomeScreen: React.FC = () => {
   const handleRefreshApp = async (app: MiniApp) => {
     const access = accessFor(app);
     if (!access.allowed) {
-      Alert.alert(ownReposOnly ? 'Nur eigene Repositories' : 'Entwicklermodus', access.reason);
+      notify(ownReposOnly ? 'Nur eigene Repositories' : 'Entwicklermodus', access.reason);
       return null;
     }
     setRefreshingId(app.id);
@@ -404,7 +405,7 @@ export const HomeScreen: React.FC = () => {
       return merged;
     } catch (error: any) {
       await refreshSession();
-      Alert.alert('Aktualisierung fehlgeschlagen', error.message);
+      notify('Aktualisierung fehlgeschlagen', error.message);
       return null;
     } finally {
       setRefreshingId(null);
@@ -415,12 +416,12 @@ export const HomeScreen: React.FC = () => {
     const quiet = opts?.quiet === true;
     const reason = blockReasonFor(app.id, app.repoUrl, blocklist);
     if (reason) {
-      if (!quiet) Alert.alert('OpenScrapp gesperrt', reason);
+      if (!quiet) notify('OpenScrapp gesperrt', reason);
       return;
     }
     const access = accessFor(app);
     if (!access.allowed) {
-      if (!quiet) Alert.alert(ownReposOnly ? 'Nur eigene Repositories' : 'Entwicklermodus', access.reason);
+      if (!quiet) notify(ownReposOnly ? 'Nur eigene Repositories' : 'Entwicklermodus', access.reason);
       return;
     }
     let authToken: string | undefined;
@@ -430,7 +431,7 @@ export const HomeScreen: React.FC = () => {
         authToken = confirmed.token;
       } catch (error: any) {
         await refreshSession();
-        if (!quiet) Alert.alert(ownReposOnly ? 'Nur eigene Repositories' : 'Entwicklermodus', error.message || 'Die Zugehörigkeit konnte nicht geprüft werden.');
+        if (!quiet) notify(ownReposOnly ? 'Nur eigene Repositories' : 'Entwicklermodus', error.message || 'Die Zugehörigkeit konnte nicht geprüft werden.');
         return;
       }
     }
@@ -447,7 +448,7 @@ export const HomeScreen: React.FC = () => {
     if (!quiet && latest && updateStatus(app.commitSha, latest) === 'available' && !dismissedUpdates.current.has(app.id)) {
       const installed = app;
       const newest = latest;
-      Alert.alert(
+      notify(
         'Update verfügbar',
         `${versionLine(installed.manifest.version, installed.commitSha, newest)}\n\nDer Speicher dieser OpenScrapp bleibt beim Aktualisieren erhalten.`,
         [
@@ -475,7 +476,7 @@ export const HomeScreen: React.FC = () => {
       commitSha: app.commitSha,
     });
     Linking.openURL(url).catch(() => {
-      Alert.alert('Melden', `Die Mail-App konnte nicht geöffnet werden. Schreibe an ${REPORT_EMAIL}.`);
+      notify('Melden', `Die Mail-App konnte nicht geöffnet werden. Schreibe an ${REPORT_EMAIL}.`);
     });
   };
 
@@ -606,7 +607,7 @@ export const HomeScreen: React.FC = () => {
                         onBarcodeScanned={handleBarcode}
                         onMountError={() => {
                           setScanning(false);
-                          Alert.alert('Kamera', 'Die Kamera konnte nicht gestartet werden.');
+                          notify('Kamera', 'Die Kamera konnte nicht gestartet werden.');
                         }}
                       />
                     ) : (
@@ -748,7 +749,7 @@ export const HomeScreen: React.FC = () => {
                   </Text>
                 </ScrollView>
                 <View style={styles.modalButtons}>
-                  <TouchableOpacity style={[styles.modalButtonCreate, { backgroundColor: tokens.lime }]} onPress={async () => { await Clipboard.setStringAsync((debugLines || []).join('\n')); Alert.alert('Debug-Log', 'In die Zwischenablage kopiert'); }}>
+                  <TouchableOpacity style={[styles.modalButtonCreate, { backgroundColor: tokens.lime }]} onPress={async () => { await Clipboard.setStringAsync((debugLines || []).join('\n')); notify('Debug-Log', 'In die Zwischenablage kopiert'); }}>
                     <Text style={[styles.modalButtonText, { color: tokens.ink }]}>Kopieren</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={[styles.modalButtonCreate, { backgroundColor: tokens.lime }]} onPress={openDebugLog}>

@@ -6,7 +6,7 @@ import { debugLog } from './src/services/DebugLog';
 import { headlessEntry, initBackgroundTasks } from './src/services/BackgroundTasks';
 
 // Generic background task engine (docs/BACKGROUND.md). Started natively by Bluetooth/boot receivers even when the UI is closed.
-AppRegistry.registerHeadlessTask('EveryAppBackgroundTask', () => async (data: any) => {
+if (typeof AppRegistry.registerHeadlessTask === 'function') AppRegistry.registerHeadlessTask('EveryAppBackgroundTask', () => async (data: any) => {
   try {
     initBackgroundTasks(false);
     await headlessEntry(data);

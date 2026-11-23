@@ -3,6 +3,7 @@ import { View, StyleSheet, StatusBar, BackHandler, ActivityIndicator, Text, Scro
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import WebView, { WebViewMessageEvent } from 'react-native-webview';
 import * as ScreenOrientation from 'expo-screen-orientation';
+import { getInfoAsync, readAsStringAsync } from '../services/appFiles';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Clipboard from 'expo-clipboard';
 import { MiniApp, Permission } from '../types';
@@ -248,7 +249,7 @@ const MiniAppRunnerBase: React.FC<MiniAppRunnerProps> = ({ app, onClose }) => {
       const entryDir = parentDir(entryRel);
       baseDirRef.current = entryDir;
       docRef.current = entryRel;
-      const htmlContent = await FileSystem.readAsStringAsync(entryUri);
+      const htmlContent = await readAsStringAsync(entryUri);
       const cache = new Map<string, Promise<{ mime: string; base64: string; text: string | null } | null>>();
       const host = virtualHost(app.id);
       const rewritten = await rewriteHtmlAssets(htmlContent, entryDir, host, (rel) => {
@@ -548,11 +549,11 @@ function decodeBase64(value: string): Uint8Array {
 async function readMiniAppAsset(localPath: string, rel: string): Promise<{ mime: string; base64: string; text: string | null } | null> {
   const uri = assetUri(localPath, rel);
   if (!uri) return null;
-  const info = await FileSystem.getInfoAsync(uri);
+  const info = await getInfoAsync(uri);
   if (!info.exists || info.isDirectory) return null;
   const mime = mimeForPath(rel);
-  const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
-  const text = isTextMime(mime) ? await FileSystem.readAsStringAsync(uri) : null;
+  const base64 = await readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+  const text = isTextMime(mime) ? await readAsStringAsync(uri) : null;
   return { mime, base64, text };
 }
 

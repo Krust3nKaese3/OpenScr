@@ -1,4 +1,4 @@
-import * as FileSystem from 'expo-file-system/legacy';
+import { appsDirectory, deleteAsync, downloadAsync, getInfoAsync, makeDirectoryAsync, moveAsync, readAsStringAsync } from './appFiles';
 import { MiniAppManifest, MiniApp } from '../types';
 import {
   listMiniAppFiles,
@@ -10,11 +10,11 @@ import {
 } from './miniAppFiles';
 import { GITHUB_API_HEADERS, commitApiUrl, githubRawUrlAtRef, parseCommitSha, treeApiUrl } from './githubPin';
 
-const APPS_DIR = `${FileSystem.documentDirectory}miniapps/`;
+const appsDir = () => appsDirectory();
 
 async function firstExistingManifest(staging: string): Promise<string> {
   for (const name of [MANIFEST_FILE, MANIFEST_FALLBACK]) {
-    const info = await FileSystem.getInfoAsync(`${staging}${name}`);
+    const info = await getInfoAsync(`${staging}${name}`);
     if (info.exists && !info.isDirectory) return name;
   }
   throw new Error('openscr.json not found in repository');
@@ -38,23 +38,26 @@ export class GitRepoService {
     }
     const { files } = listMiniAppFiles(tree.tree || []);
 
-    const staging = `${APPS_DIR}${appId}.staging/`;
-    const backup = `${APPS_DIR}${appId}.backup/`;
-    const finalPath = `${APPS_DIR}${appId}/`;
-    await FileSystem.deleteAsync(staging, { idempotent: true });
-    await FileSystem.makeDirectoryAsync(staging, { intermediates: true });
+    const root = appsDir();
+    const staging = `${root}${appId}.staging/`;
+    const backup = `${root}${appId}.backup/`;
+    const finalPath = `${root}${appId}/`;
+    await deleteAsync(staging, { idempotent: true });
+    await makeDirectoryAsync(staging, { intermediates: true });
 
     try {
       await mapPool(files, 4, async (file) => {
         const dest = `${staging}${file.rel}`;
         const parent = dest.slice(0, dest.lastIndexOf('/'));
-        await FileSystem.makeDirectoryAsync(parent, { intermediates: true });
-        await FileSystem.deleteAsync(dest, { idempotent: true });
+        await makeDirectoryAsync(parent, { intermediates: true });
+        await deleteAsync(dest, { idempotent: true });
         // SHA URL: raw.githubusercontent.com caches /main/ and ignores ?t= cache busters.
-        const result = await FileSystem.downloadAsync(
+        const result = await downloadAsync(
           githubRawUrlAtRef(owner, repo, commitSha, file.path),
           dest,
-          { headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache', ...GitRepoService.authHeaders(token) } },
+          { headers: typeof document === 'undefined'
+            ? { 'Cache-Control': 'no-cache', Pragma: 'no-cache', ...GitRepoService.authHeaders(token) }
+            : GitRepoService.authHeaders(token) },
         );
         if (result.status < 200 || result.status >= 300) {
           throw new Error(`Failed to download ${file.rel} (${result.status})`);
@@ -63,7 +66,7 @@ export class GitRepoService {
 
       let total = 0;
       for (const file of files) {
-        const info = await FileSystem.getInfoAsync(`${staging}${file.rel}`);
+        const info = await getInfoAsync(`${staging}${file.rel}`);
         const size = info.exists && !info.isDirectory && typeof info.size === 'number' ? info.size : 0;
         if (size > MINIAPP_LIMITS.maxFileBytes) {
           throw new Error(`A file exceeds the ${MINIAPP_LIMITS.maxFileBytes} byte limit.`);
@@ -75,7 +78,7 @@ export class GitRepoService {
       }
 
       const manifestName = await firstExistingManifest(staging);
-      const manifestRaw = await FileSystem.readAsStringAsync(`${staging}${manifestName}`);
+      const manifestRaw = await readAsStringAsync(`${staging}${manifestName}`);
       let manifest: MiniAppManifest;
       try {
         manifest = JSON.parse(manifestRaw);
@@ -86,25 +89,25 @@ export class GitRepoService {
         throw new Error(`Entrypoint missing in ${manifestName}`);
       }
       const entryRel = normalizeEntrypoint(manifest.entrypoint);
-      const entryInfo = await FileSystem.getInfoAsync(`${staging}${entryRel}`);
+      const entryInfo = await getInfoAsync(`${staging}${entryRel}`);
       if (!entryInfo.exists || entryInfo.isDirectory) {
         throw new Error(`Entrypoint ${manifest.entrypoint} not found in repository`);
       }
 
-      await FileSystem.deleteAsync(backup, { idempotent: true });
-      const existing = await FileSystem.getInfoAsync(finalPath);
-      if (existing.exists) await FileSystem.moveAsync({ from: finalPath, to: backup });
+      await deleteAsync(backup, { idempotent: true });
+      const existing = await getInfoAsync(finalPath);
+      if (existing.exists) await moveAsync({ from: finalPath, to: backup });
       try {
-        await FileSystem.moveAsync({ from: staging, to: finalPath });
+        await moveAsync({ from: staging, to: finalPath });
       } catch (moveError) {
-        const rolled = await FileSystem.getInfoAsync(finalPath);
+        const rolled = await getInfoAsync(finalPath);
         if (!rolled.exists) {
-          const backupInfo = await FileSystem.getInfoAsync(backup);
-          if (backupInfo.exists) await FileSystem.moveAsync({ from: backup, to: finalPath });
+          const backupInfo = await getInfoAsync(backup);
+          if (backupInfo.exists) await moveAsync({ from: backup, to: finalPath });
         }
         throw moveError;
       }
-      await FileSystem.deleteAsync(backup, { idempotent: true });
+      await deleteAsync(backup, { idempotent: true });
 
       return {
         id: appId,
@@ -116,7 +119,7 @@ export class GitRepoService {
         commitSha,
       };
     } catch (error) {
-      await FileSystem.deleteAsync(staging, { idempotent: true });
+      await deleteAsync(staging, { idempotent: true });
       throw error;
     }
   }
@@ -152,10 +155,19 @@ export class GitRepoService {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 20_000);
     try {
-      const response = await fetch(url, {
-        headers: { ...GITHUB_API_HEADERS, ...this.authHeaders(token) },
-        signal: ctrl.signal,
-      });
+      const headers = { ...GITHUB_API_HEADERS, ...this.authHeaders(token) };
+      // Cache-Control and Pragma make the browser preflight, which GitHub rejects.
+      if (typeof document !== 'undefined') {
+        delete headers['User-Agent'];
+        delete headers['Cache-Control'];
+        delete headers.Pragma;
+      }
+      let response: Response;
+      try {
+        response = await fetch(url, { headers, signal: ctrl.signal });
+      } catch (error: any) {
+        throw new Error(`GitHub nicht erreichbar: ${error?.message || error}`);
+      }
       if (response.status === 401) {
         throw new Error('GitHub hat die Anmeldung abgelehnt. Bitte im Entwicklermodus erneut anmelden.');
       }
@@ -184,14 +196,15 @@ export class GitRepoService {
 
   static async deleteApp(app: MiniApp): Promise<void> {
     await this.deleteStoredApp(app.id);
-    if (app.localPath) await FileSystem.deleteAsync(app.localPath, { idempotent: true });
+    if (app.localPath) await deleteAsync(app.localPath, { idempotent: true });
   }
 
   /** Installed copy plus the staging and backup directories used during download. */
   static async deleteStoredApp(appId: string): Promise<void> {
-    await FileSystem.deleteAsync(`${APPS_DIR}${appId}/`, { idempotent: true });
-    await FileSystem.deleteAsync(`${APPS_DIR}${appId}.staging/`, { idempotent: true });
-    await FileSystem.deleteAsync(`${APPS_DIR}${appId}.backup/`, { idempotent: true });
+    const root = appsDir();
+    await deleteAsync(`${root}${appId}/`, { idempotent: true });
+    await deleteAsync(`${root}${appId}.staging/`, { idempotent: true });
+    await deleteAsync(`${root}${appId}.backup/`, { idempotent: true });
   }
 }
 
