@@ -24,6 +24,7 @@ export interface MpUiState {
   askName?: string;
   gameUrl?: string;
   batteryWarning?: string;
+  connectedGuests?: number;
   qrFocus?: 'all' | 'wifi' | 'game' | 'hotspot';
 }
 
@@ -239,12 +240,14 @@ function snapshot(session: LiveSession): HostResult {
 }
 
 function hostUi(session: LiveSession): MpUiState {
+  const players = session.room ? session.room.players() : session.roster;
   return {
     mode: 'host',
     qrPayload: session.qrPayload,
     roomCode: session.roomCode,
     gameUrl: session.gameUrl,
     batteryWarning: session.batteryWarning,
+    connectedGuests: players.filter((player) => player.connected && !player.host).length,
   };
 }
 
@@ -292,7 +295,7 @@ async function watchBattery(session: LiveSession): Promise<void> {
   session.batteryWarning = warning;
   if (live === session && session.role === 'host') {
     publishPresence({ roomCode: session.roomCode, gameUrl: session.gameUrl, batteryWarning: warning });
-    if (ui?.mode === 'host') setUi(hostUi(session));
+    if (ui?.mode === 'host') setUi({ ...hostUi(session), qrFocus: ui.qrFocus });
   }
 }
 
