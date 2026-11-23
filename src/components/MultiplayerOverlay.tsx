@@ -254,8 +254,7 @@ function GameLinkActions({ url }: { url: string }) {
     setTimeout(() => setCopied(false), 1600);
   };
   const share = () => {
-    const shared = shareableGameUrl(url);
-    void Share.share({ message: `Komm in mein Spiel! (gleiches WLAN nötig)\n\n${shared}` });
+    void Share.share({ message: shareableGameUrl(url) });
   };
   return (
     <View style={styles.linkRow}>
