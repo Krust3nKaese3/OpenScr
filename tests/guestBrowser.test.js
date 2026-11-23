@@ -26,6 +26,16 @@ const {
 } = require('../src/services/multiplayer/session.ts');
 const { createMemoryRoomStore } = require('../src/services/multiplayer/persist.ts');
 
+test('WLAN-Einladung öffnet die Systemeinstellungen statt ein Passwortfeld', () => {
+  const overlay = require('node:fs').readFileSync(require('node:path').join(__dirname, '../src/components/MultiplayerOverlay.tsx'), 'utf8');
+  const share = require('node:fs').readFileSync(require('node:path').join(__dirname, '../src/services/multiplayer/lanShare.ts'), 'utf8');
+  assert.match(overlay, /Stellt sicher, dass ihr im selben WLAN seid/);
+  assert.match(overlay, /WLAN teilen/);
+  assert.doesNotMatch(overlay, /placeholder="WLAN-Passwort"/);
+  assert.match(share, /android\.settings\.WIFI_SETTINGS/);
+  assert.match(share, /openSettings/);
+});
+
 test('WLAN-Code maskiert Sonderzeichen und bleibt leer ohne Namen', () => {
   assert.strictEqual(encodeWifiQr('', 'geheim'), '');
   assert.strictEqual(encodeWifiQr('Haus', ''), 'WIFI:T:nopass;S:Haus;;');

@@ -129,7 +129,7 @@ Ein Gast ohne OpenScr scannt zwei QR-Codes und spielt im normalen Browser des Ha
 
 Der Host-Bildschirm fragt zuerst **WLAN** oder **Hotspot**.
 
-- **WLAN:** OpenScr zeigt den Netznamen, soweit Android ihn herausgibt. Sonst tippt der Host ihn ein. Das Passwort tippt er einmal. Ein Häkchen merkt es nur auf diesem Gerät. Danach gibt es einen WLAN-Code `WIFI:T:WPA;S:<name>;P:<passwort>;;` und einen Spiel-Code `http://<ip>:<port>/g/<token>/`.
+- **WLAN:** OpenScr fragt Name und Passwort nicht ab. Der Hinweis lautet „Stellt sicher, dass ihr im selben WLAN seid“. **WLAN teilen** öffnet die Android-WLAN-Einstellungen (`android.settings.WIFI_SETTINGS`, sonst die App-Einstellungen). Dort tippt der Host das Netz und **Teilen**, und Android zeigt den System-QR. Der Spiel-Code `http://<ip>:<port>/g/<token>/` bleibt auf dem OpenScr-Bildschirm. `showWifiQr` öffnet genau diesen Bildschirm. Mitgegebene Zugangsdaten erzeugt er nicht.
 - **Hotspot:** Ein Knopf startet auf Android einen `LocalOnlyHotspot`, wenn das Gerät die Zugangsdaten herausgibt. Dann entstehen beide Codes von selbst. Gibt Android SSID oder Passwort nicht heraus, oder der Start scheitert, öffnet OpenScr die Systemeinstellungen für den Hotspot und der Host trägt beides ein.
 
 Die Codes bleiben erreichbar, auch mitten im Spiel: OpenScr blendet einen kleinen Knopf **Einladen** ein. Der kommt von OpenScr, nicht von der OpenScrapp.

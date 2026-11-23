@@ -75,6 +75,23 @@ export function stopHotspot(): void {
   }
 }
 
+/** Opens the system Wi-Fi screen so the host can share the network from Android. */
+export async function openWifiSettings(): Promise<void> {
+  const { Linking, Platform } = require('react-native') as {
+    Platform: { OS: string };
+    Linking: { sendIntent?: (action: string) => Promise<void>; openSettings: () => Promise<void> };
+  };
+  if (Platform.OS === 'android' && typeof Linking.sendIntent === 'function') {
+    try {
+      await Linking.sendIntent('android.settings.WIFI_SETTINGS');
+      return;
+    } catch {
+      /* The intent is missing on this device. The app settings are the fallback. */
+    }
+  }
+  await Linking.openSettings();
+}
+
 export async function openTetherSettings(): Promise<void> {
   try {
     const mod = require('../../../modules/expo-network-info') as { openTetherSettings?: () => boolean };
