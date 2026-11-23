@@ -20,6 +20,22 @@ export function gameUrl(ip: string, port: number, token: string): string {
   return `http://${ip}:${port}/g/${token}/`;
 }
 
+/** WhatsApp linkifies a URL better when nothing follows it and it has no trailing slash. */
+export function shareableGameUrl(url: string): string {
+  if (!url.endsWith('/')) return url;
+  const without = url.slice(0, -1);
+  let pathname = '';
+  try {
+    pathname = new URL(without).pathname;
+  } catch {
+    return url;
+  }
+  const token = pathname.split('/')[2] || '';
+  const resolved = resolveGuestPath(pathname, token);
+  if (resolved.ok && resolved.rel === '' && !resolved.websocket) return without;
+  return url;
+}
+
 export function guestBootTags(token: string, appId: string, room: string): string {
   const payload = scriptJson({ appId, room });
   return `<base href="/g/${token}/"><script>window.__OPEN_SCR_GUEST__=${payload};</script><script src="openscr-guest.js"></script>`;

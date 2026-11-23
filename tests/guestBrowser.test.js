@@ -5,6 +5,7 @@ const {
   GUEST_SHIM_SOURCE,
   decodeWsFrames,
   encodeWifiQr,
+  shareableGameUrl,
   injectGuestDocument,
   resolveGuestPath,
   utf8Encode,
@@ -29,7 +30,11 @@ const { createMemoryRoomStore } = require('../src/services/multiplayer/persist.t
 test('Spiel-QR bietet Kopieren und Teilen der Beitrittsadresse', () => {
   const overlay = require('node:fs').readFileSync(require('node:path').join(__dirname, '../src/components/MultiplayerOverlay.tsx'), 'utf8');
   assert.match(overlay, /Link kopieren/);
-  assert.match(overlay, /Komm in mein Spiel: \$\{url\} \(gleiches WLAN nötig\)/);
+  assert.match(overlay, /Komm in mein Spiel! \(gleiches WLAN nötig\)\\n\\n\$\{shared\}/);
+  assert.doesNotMatch(overlay, /Share\.share\(\{[^}]*\burl:/);
+  const join = 'http://192.168.178.94:42169/g/37acde606eedc0b8/';
+  assert.strictEqual(shareableGameUrl(join), 'http://192.168.178.94:42169/g/37acde606eedc0b8');
+  assert.strictEqual(resolveGuestPath('/g/37acde606eedc0b8', '37acde606eedc0b8').ok, true);
   assert.match(overlay, /Share\.share/);
   assert.match(overlay, /expo-clipboard/);
   assert.strictEqual(overlay.split('<GameLinkActions').length - 1, 2);
