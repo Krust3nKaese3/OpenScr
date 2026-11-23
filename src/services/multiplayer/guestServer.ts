@@ -133,7 +133,7 @@ function bindHttp(
         return;
       }
       buffer = head.rest;
-      if (head.method !== 'GET') {
+      if (head.method !== 'GET' && head.method !== 'HEAD') {
         conn.send(textResponse(405, 'Nur GET.'));
         fail();
         return;
@@ -165,7 +165,7 @@ function bindHttp(
         return;
       }
       mode = 'file';
-      void serveFile(opts, target.rel).then((bytes) => {
+      void serveFile(opts, target.rel, head.headers.range, head.method === 'HEAD').then((bytes) => {
         conn.send(bytes);
         fail();
       }).catch((error: unknown) => {
@@ -207,15 +207,17 @@ function bindHttp(
 async function serveFile(
   opts: { token: string; appId: string; room: string; read: (rel: string) => Promise<GuestFile | null> },
   rel: string,
+  range?: string,
+  headOnly = false,
 ): Promise<Uint8Array> {
   if (rel === 'openscr-guest.js' || rel.endsWith('/openscr-guest.js')) {
-    return httpBytes(200, 'OK', { 'content-type': 'text/javascript; charset=utf-8' }, utf8Encode(GUEST_SHIM_SOURCE));
+    return fileBytes('text/javascript; charset=utf-8', utf8Encode(GUEST_SHIM_SOURCE), range, headOnly);
   }
   const file = await opts.read(rel);
   if (!file) {
     if (rel) return textResponse(404, `Nicht gefunden: ${rel}`);
     const html = injectGuestDocument('<p>Die OpenScrapp ist noch nicht geladen.</p>', opts.token, opts.appId, opts.room);
-    return httpBytes(200, 'OK', { 'content-type': 'text/html; charset=utf-8' }, utf8Encode(html));
+    return fileBytes('text/html; charset=utf-8', utf8Encode(html), range, headOnly);
   }
   if (file.body.length > MAX_FILE) return textResponse(413, 'Datei zu groß.');
   const fromPath = rel ? mimeForPath(rel) : '';
@@ -229,7 +231,44 @@ async function serveFile(
     ? utf8Encode(injectGuestDocument(html, opts.token, opts.appId, opts.room))
     : file.body.slice();
   const type = mime.startsWith('text/') || mime.includes('javascript') || mime.includes('json') ? `${mime}; charset=utf-8` : mime;
-  return httpBytes(200, 'OK', { 'content-type': type }, payload);
+  return fileBytes(type, payload, range, headOnly);
+}
+
+/** Chrome lädt Audio mit `Range: bytes=0-` und erwartet 206. */
+function fileBytes(type: string, payload: Uint8Array, range: string | undefined, headOnly: boolean): Uint8Array {
+  const headers: Record<string, string> = { 'content-type': type, 'accept-ranges': 'bytes' };
+  const sized = payload.length;
+  const part = byteRange(payload, range);
+  if (part.unsatisfiable) {
+    return httpBytes(416, 'Range Not Satisfiable', { ...headers, 'content-range': `bytes */${sized}` }, new Uint8Array());
+  }
+  if (part.partial) headers['content-range'] = `bytes ${part.start}-${part.end}/${sized}`;
+  const body = headOnly ? new Uint8Array() : part.body;
+  if (headOnly) headers['content-length'] = String(part.body.length);
+  return httpBytes(part.partial ? 206 : 200, part.partial ? 'Partial Content' : 'OK', headers, body);
+}
+
+function byteRange(payload: Uint8Array, range: string | undefined): { body: Uint8Array; partial: boolean; unsatisfiable: boolean; start: number; end: number } {
+  const size = payload.length;
+  const full = { body: payload, partial: false, unsatisfiable: false, start: 0, end: Math.max(0, size - 1) };
+  if (!range) return full;
+  const match = /^bytes=(\d*)-(\d*)$/i.exec(range.trim());
+  if (!match || (match[1] === '' && match[2] === '')) return full;
+  let start = 0;
+  let end = size - 1;
+  if (match[1] === '') {
+    const suffix = Number(match[2]);
+    if (!Number.isFinite(suffix) || suffix <= 0) return { ...full, unsatisfiable: true };
+    start = Math.max(0, size - suffix);
+  } else {
+    start = Number(match[1]);
+    if (match[2] !== '') end = Number(match[2]);
+  }
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || start >= size || end < start) {
+    return { ...full, unsatisfiable: true };
+  }
+  end = Math.min(end, size - 1);
+  return { body: payload.slice(start, end + 1), partial: true, unsatisfiable: false, start, end };
 }
 
 /** Prüft vom Handy aus, dass diese Instanz die Seite und die Brücke wirklich sendet. */
