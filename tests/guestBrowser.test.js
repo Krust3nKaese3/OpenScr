@@ -26,6 +26,15 @@ const {
 } = require('../src/services/multiplayer/session.ts');
 const { createMemoryRoomStore } = require('../src/services/multiplayer/persist.ts');
 
+test('Spiel-QR bietet Kopieren und Teilen der Beitrittsadresse', () => {
+  const overlay = require('node:fs').readFileSync(require('node:path').join(__dirname, '../src/components/MultiplayerOverlay.tsx'), 'utf8');
+  assert.match(overlay, /Link kopieren/);
+  assert.match(overlay, /Komm in mein Spiel: \$\{url\} \(gleiches WLAN nötig\)/);
+  assert.match(overlay, /Share\.share/);
+  assert.match(overlay, /expo-clipboard/);
+  assert.strictEqual(overlay.split('<GameLinkActions').length - 1, 2);
+});
+
 test('WLAN-Einladung öffnet die Systemeinstellungen statt ein Passwortfeld', () => {
   const overlay = require('node:fs').readFileSync(require('node:path').join(__dirname, '../src/components/MultiplayerOverlay.tsx'), 'utf8');
   const share = require('node:fs').readFileSync(require('node:path').join(__dirname, '../src/services/multiplayer/lanShare.ts'), 'utf8');
