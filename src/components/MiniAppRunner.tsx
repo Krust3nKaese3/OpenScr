@@ -3,7 +3,7 @@ import { View, StyleSheet, StatusBar, BackHandler, ActivityIndicator, Text, Scro
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import WebView, { WebViewMessageEvent } from 'react-native-webview';
 import * as ScreenOrientation from 'expo-screen-orientation';
-import { getInfoAsync, readAsStringAsync } from '../services/appFiles';
+import { getInfoAsync, listAppFiles, readAsStringAsync } from '../services/appFiles';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Clipboard from 'expo-clipboard';
 import { MiniApp, Permission } from '../types';
@@ -149,11 +149,12 @@ const MiniAppRunnerBase: React.FC<MiniAppRunnerProps> = ({ app, onClose }) => {
   useEffect(() => subscribeMpUi(setMpUi), []);
   useEffect(() => subscribeHostPresence(setHostPresence), []);
   useEffect(() => {
-    if (Platform.OS !== 'android') return undefined;
+    if (Platform.OS !== 'android' && Platform.OS !== 'web') return undefined;
     let entry = 'index.html';
     try { entry = normalizeEntrypoint(app.manifest.entrypoint); } catch { entry = 'index.html'; }
     setGuestContent(app.id, {
       entry,
+      list: () => listAppFiles(app.localPath),
       read: async (rel) => {
         const file = await readMiniAppAsset(app.localPath, rel || entry);
         if (!file) return null;
@@ -555,7 +556,7 @@ const MiniAppRunnerBase: React.FC<MiniAppRunnerProps> = ({ app, onClose }) => {
       />
       {learning ? (
         <SourceCodeModal app={app} visible={showSource} onClose={() => setShowSource(false)} />
-      ) : Platform.OS !== 'android' ? null : (
+      ) : Platform.OS === 'ios' ? null : (
       <MultiplayerOverlay
         state={mpUi}
         onDone={dismissMpUi}
@@ -573,8 +574,10 @@ const MiniAppRunnerBase: React.FC<MiniAppRunnerProps> = ({ app, onClose }) => {
 export const MiniAppRunner = React.memo(MiniAppRunnerBase);
 
 function decodeBase64(value: string): Uint8Array {
-  const buf = Buffer.from(value, 'base64');
-  return Uint8Array.from(buf);
+  const binary = atob(value);
+  const out = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) out[i] = binary.charCodeAt(i);
+  return out;
 }
 
 async function readMiniAppAsset(localPath: string, rel: string): Promise<{ mime: string; base64: string; text: string | null } | null> {

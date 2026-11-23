@@ -482,10 +482,16 @@ export function parseBridgeMessage(message: unknown): ParsedMessage {
 
 const rateHits = new Map<string, number[]>();
 
+function rateMax(rule: RateRule): number {
+  // Metro sets __DEV__ for Expo dev and the browser preview. Production builds keep the tight cap.
+  const dev = typeof __DEV__ !== 'undefined' && __DEV__;
+  return dev ? Math.max(rule.max * 25, 200) : rule.max;
+}
+
 export function takeRate(appId: string, methodName: string, rule: RateRule, now = Date.now()): boolean {
   const bucket = `${appId}\0${methodName}`;
   const prev = (rateHits.get(bucket) || []).filter((stamp) => now - stamp < rule.windowMs);
-  if (prev.length >= rule.max) {
+  if (prev.length >= rateMax(rule)) {
     rateHits.set(bucket, prev);
     return false;
   }

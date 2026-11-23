@@ -140,15 +140,38 @@ async function readFallbackIp(): Promise<string> {
   return '';
 }
 
+function browserDev(): boolean {
+  return typeof document !== 'undefined';
+}
+
 export const tcpTransport: MpTransport = {
   listen(onConnection) {
-    const Tcp = tcpModule();
-    const server = Tcp.createServer((socket) => {
-      onConnection(bindSocket(socket));
-    });
+    const browserRoom = () => Promise.resolve({ port: 8099, close() {} });
+    let Tcp: TcpApi;
+    try {
+      Tcp = tcpModule();
+    } catch (error) {
+      // Browser tests have no TCP socket. The room still opens so the scrapp can show its lobby.
+      if (!browserDev()) throw error;
+      return browserRoom();
+    }
+    let server: TcpServer;
+    try {
+      server = Tcp.createServer((socket) => {
+        onConnection(bindSocket(socket));
+      });
+    } catch (error) {
+      if (!browserDev()) throw error;
+      return browserRoom();
+    }
+    if (!server || typeof server.listen !== 'function') {
+      if (!browserDev()) throw new Error(MISSING);
+      return browserRoom();
+    }
     return new Promise((resolve, reject) => {
-      server.on('error', (err) => reject(err instanceof Error ? err : new Error('Der lokale Server ist nicht gestartet.')));
-      server.listen({ port: 0, host: '0.0.0.0' }, () => {
+      try {
+        server.on('error', (err) => reject(err instanceof Error ? err : new Error('Der lokale Server ist nicht gestartet.')));
+        server.listen({ port: 0, host: '0.0.0.0' }, () => {
         const address = server.address();
         const port = address && typeof address.port === 'number' ? address.port : 0;
         if (port < 1024) {
@@ -170,7 +193,11 @@ export const tcpTransport: MpTransport = {
             }
           },
         });
-      });
+        });
+      } catch (error) {
+        if (!browserDev()) reject(error instanceof Error ? error : new Error(MISSING));
+        else resolve({ port: 8099, close() {} });
+      }
     });
   },
 
@@ -197,6 +224,7 @@ export const tcpTransport: MpTransport = {
     if (chosen) return chosen;
     const fallback = await readFallbackIp();
     if (fallback) return fallback;
+    if (browserDev()) return '192.168.4.20';
     throw new Error('Keine private Adresse im WLAN oder Hotspot. Beide Geräte müssen im selben Netz sein. Dafür ist ein neuer Build nötig.');
   },
 };

@@ -1,0 +1,222 @@
+/**
+ * Dev-only guest server. The browser cannot listen, so Metro starts this
+ * process-local HTTP and WebSocket server. Phones on the LAN open /g/<token>/.
+ */
+const http = require('http');
+const crypto = require('crypto');
+const os = require('os');
+
+if (global.__openscrGuestDev) {
+  module.exports = global.__openscrGuestDev;
+} else {
+  const PORT = 8791;
+  const rooms = new Map();
+
+  function lanIp() {
+    const nets = os.networkInterfaces();
+    for (const list of Object.values(nets)) {
+      for (const net of list || []) {
+        const v4 = net.family === 'IPv4' || net.family === 4;
+        if (!v4 || net.internal) continue;
+        return net.address;
+      }
+    }
+    return '127.0.0.1';
+  }
+
+  function acceptKey(key) {
+    return crypto.createHash('sha1').update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`).digest('base64');
+  }
+
+  function sendText(socket, text) {
+    const payload = Buffer.from(String(text), 'utf8');
+    const header = payload.length < 126
+      ? Buffer.from([0x81, payload.length])
+      : Buffer.concat([Buffer.from([0x81, 126]), Buffer.from([(payload.length >> 8) & 255, payload.length & 255])]);
+    socket.write(Buffer.concat([header, payload]));
+  }
+
+  function readFrames(buffer) {
+    const texts = [];
+    let offset = 0;
+    let closed = false;
+    while (buffer.length - offset >= 2) {
+      const b0 = buffer[offset];
+      const b1 = buffer[offset + 1];
+      const opcode = b0 & 0x0f;
+      const masked = (b1 & 0x80) !== 0;
+      let length = b1 & 0x7f;
+      let start = offset + 2;
+      if (length === 126) {
+        if (buffer.length - start < 2) break;
+        length = buffer.readUInt16BE(start);
+        start += 2;
+      } else if (length === 127) break;
+      const maskLen = masked ? 4 : 0;
+      if (buffer.length - start < maskLen + length) break;
+      let payload = buffer.subarray(start + maskLen, start + maskLen + length);
+      if (masked) {
+        const mask = buffer.subarray(start, start + 4);
+        payload = Buffer.from(payload.map((byte, index) => byte ^ mask[index % 4]));
+      }
+      offset = start + maskLen + length;
+      if (opcode === 8) closed = true;
+      if (opcode === 1) texts.push(payload.toString('utf8'));
+    }
+    return { texts, rest: buffer.subarray(offset), closed };
+  }
+
+  function attach(socket, onText, onClose) {
+    let buffer = Buffer.alloc(0);
+    socket.on('data', (chunk) => {
+      buffer = Buffer.concat([buffer, chunk]);
+      const parsed = readFrames(buffer);
+      buffer = parsed.rest;
+      parsed.texts.forEach((text) => onText(text));
+      if (parsed.closed) socket.end();
+    });
+    socket.on('close', onClose);
+    socket.on('end', onClose);
+    socket.on('error', onClose);
+  }
+
+  function roomOf(token) {
+    return rooms.get(token) || null;
+  }
+
+  const server = http.createServer((req, res) => {
+    const url = new URL(req.url || '/', 'http://127.0.0.1');
+    res.setHeader('access-control-allow-origin', '*');
+    res.setHeader('access-control-allow-headers', 'content-type');
+    res.setHeader('access-control-allow-methods', 'GET,POST,OPTIONS');
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+    if (req.method === 'POST' && url.pathname === '/openscr-dev-guest') {
+      const chunks = [];
+      req.on('data', (chunk) => chunks.push(chunk));
+      req.on('end', () => {
+        try {
+          const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+          const token = String(body.token || '');
+          if (!/^[a-f0-9]{16}$/.test(token)) throw new Error('Token fehlt.');
+          const files = new Map();
+          for (const file of body.files || []) {
+            files.set(String(file.path || ''), {
+              mime: String(file.mime || 'application/octet-stream'),
+              body: Buffer.from(String(file.base64 || ''), 'base64'),
+            });
+          }
+          const previous = rooms.get(token);
+          rooms.set(token, {
+            appId: String(body.appId || ''),
+            room: String(body.room || ''),
+            files,
+            hosts: previous ? previous.hosts : new Set(),
+            guests: previous ? previous.guests : new Map(),
+          });
+          const ip = lanIp();
+          console.log(`[openscr-guest-dev] Raum ${body.room} auf http://${ip}:${PORT}/g/${token}/`);
+          res.writeHead(200, { 'content-type': 'application/json' });
+          res.end(JSON.stringify({ port: PORT, ip }));
+        } catch (error) {
+          res.writeHead(400, { 'content-type': 'text/plain' });
+          res.end(error instanceof Error ? error.message : 'Ungültig.');
+        }
+      });
+      return;
+    }
+    const parts = url.pathname.split('/');
+    if (parts[1] !== 'g' || !parts[2]) {
+      res.writeHead(404, { 'content-type': 'text/plain' });
+      res.end('Nicht gefunden.');
+      return;
+    }
+    const room = roomOf(parts[2]);
+    if (!room) {
+      res.writeHead(404, { 'content-type': 'text/plain' });
+      res.end('Nicht gefunden.');
+      return;
+    }
+    if (parts.length === 3) {
+      res.writeHead(302, { location: `/g/${parts[2]}/` });
+      res.end();
+      return;
+    }
+    const rel = parts.slice(3).join('/');
+    if (rel === 'ws') {
+      res.writeHead(426, { 'content-type': 'text/plain' });
+      res.end('WebSocket.');
+      return;
+    }
+    const key = !rel || rel === 'index.html' ? '' : rel;
+    const file = room.files.get(key);
+    if (!file) {
+      res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+      res.end(`Nicht gefunden: ${rel || '/'}`);
+      return;
+    }
+    res.writeHead(200, { 'content-type': file.mime, 'cache-control': 'no-store' });
+    res.end(req.method === 'HEAD' ? undefined : file.body);
+  });
+
+  server.on('upgrade', (req, socket) => {
+    const url = new URL(req.url || '/', 'http://127.0.0.1');
+    const key = req.headers['sec-websocket-key'];
+    if (!key) {
+      socket.destroy();
+      return;
+    }
+    socket.write(
+      `HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${acceptKey(key)}\r\n\r\n`,
+    );
+    if (url.pathname === '/openscr-dev-host') {
+      const token = url.searchParams.get('token') || '';
+      const room = roomOf(token);
+      if (!room) {
+        socket.destroy();
+        return;
+      }
+      room.hosts.add(socket);
+      attach(socket, (text) => {
+        let message;
+        try { message = JSON.parse(text); } catch { return; }
+        const guest = room.guests.get(message.id);
+        if (!guest) return;
+        if (message.t === 'text') sendText(guest, message.data);
+        if (message.t === 'close') guest.end();
+      }, () => room.hosts.delete(socket));
+      return;
+    }
+    const parts = url.pathname.split('/');
+    if (parts[1] !== 'g' || parts[3] !== 'ws') {
+      socket.destroy();
+      return;
+    }
+    const room = roomOf(parts[2]);
+    if (!room) {
+      socket.destroy();
+      return;
+    }
+    const id = crypto.randomBytes(4).toString('hex');
+    room.guests.set(id, socket);
+    room.hosts.forEach((host) => sendText(host, JSON.stringify({ t: 'guest', id })));
+    attach(socket, (text) => {
+      room.hosts.forEach((host) => sendText(host, JSON.stringify({ t: 'text', id, data: text })));
+    }, () => {
+      room.guests.delete(id);
+      room.hosts.forEach((host) => sendText(host, JSON.stringify({ t: 'close', id })));
+    });
+  });
+
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log(`[openscr-guest-dev] hört auf ${PORT}, LAN ${lanIp()}`);
+  });
+  server.on('error', (error) => {
+    console.warn(`[openscr-guest-dev] ${error.message}`);
+  });
+  global.__openscrGuestDev = { port: PORT };
+  module.exports = global.__openscrGuestDev;
+}

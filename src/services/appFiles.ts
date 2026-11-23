@@ -71,6 +71,17 @@ export async function getInfoAsync(uri: string): Promise<{ exists: boolean; isDi
   return { exists: true, isDirectory: false, size: node.size };
 }
 
+export async function listAppFiles(root: string): Promise<string[]> {
+  if (!usesWebFiles()) return [];
+  load();
+  const prefix = `${norm(root).replace(/\/$/, '')}/`;
+  const rels: string[] = [];
+  nodes.forEach((node, key) => {
+    if (!node.dir && key.startsWith(prefix)) rels.push(key.slice(prefix.length));
+  });
+  return rels;
+}
+
 export async function readDirectoryAsync(uri: string): Promise<string[]> {
   if (!usesWebFiles()) return FileSystem.readDirectoryAsync(uri);
   load();

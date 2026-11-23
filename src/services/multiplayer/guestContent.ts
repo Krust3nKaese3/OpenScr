@@ -7,6 +7,8 @@ export interface GuestFile {
 export interface GuestContent {
   entry: string;
   read(rel: string): Promise<GuestFile | null>;
+  /** Relative paths of the installed scrapp. The browser guest server uploads these. */
+  list?(): Promise<string[]>;
 }
 
 const files = new Map<string, GuestContent>();

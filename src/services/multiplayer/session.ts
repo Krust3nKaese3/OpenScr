@@ -13,6 +13,7 @@ import { setHostKeepAlive } from './hostKeepAlive';
 import { clearGuestContent, guestContent } from './guestContent';
 import { assertGuestServing, openGuestServer, tcpByteListen, type ByteListen, type GuestServer } from './guestServer';
 import { shareableGameUrl } from './guestHttp';
+import { openBrowserDevGuest } from './browserGuestDev';
 import { clearInviteDraft } from './invite';
 import { readHostBattery, stopHotspot } from './lanShare';
 import { HOST_AWAKE_TAG, setKeepAwake } from '../keepAwake';
@@ -196,6 +197,7 @@ export async function resetMultiplayerForTests(): Promise<void> {
 
 function setUi(next: MpUiState | null): void {
   ui = next;
+  console.log('[openscr-mp] Oberfläche', next ? `${next.mode}${next.qrFocus ? `/${next.qrFocus}` : ''} Raum ${next.roomCode || '—'}` : 'zu');
   uiListeners.forEach((listener) => listener(ui));
 }
 
@@ -307,7 +309,46 @@ async function watchBattery(session: LiveSession): Promise<void> {
 }
 
 async function startBrowserGuest(session: LiveSession): Promise<void> {
-  if (session.role !== 'host' || !browserGuestAllowed()) return;
+  if (session.role !== 'host') return;
+  if (typeof document !== 'undefined') {
+    const content = guestContent(session.appId);
+    if (!content) {
+      session.guestPhase = 'failed';
+      session.guestError = 'Die OpenScrapp ist noch nicht geladen. Einladung später erneut öffnen.';
+      console.log('[openscr-mp] Gastserver ohne Dateien, Raum', session.roomCode);
+      return;
+    }
+    try {
+      const handle = await openBrowserDevGuest({
+        token: session.token,
+        appId: session.appId,
+        room: session.roomCode,
+        content,
+        onLink: (link) => {
+          if (!live || live !== session || session.leaving) {
+            link.close();
+            return;
+          }
+          bindHostLink(session, link);
+        },
+      });
+      session.guestServer = handle;
+      session.guestPort = handle.port;
+      session.lanIp = handle.ip;
+      session.gameUrl = shareableGameUrl(handle.url(handle.ip));
+      session.guestPhase = 'ready';
+      session.guestError = '';
+      showHost(session);
+    } catch (error) {
+      session.guestPhase = 'failed';
+      session.gameUrl = '';
+      session.guestError = error instanceof Error ? error.message : 'Der Gastserver im Browser ist nicht gestartet.';
+      console.warn(`[openscr-mp] ${session.guestError}`);
+      showHost(session);
+    }
+    return;
+  }
+  if (!browserGuestAllowed()) return;
   const content = guestContent(session.appId);
   const listen = guestListenOverride || tcpByteListen;
   try {
@@ -925,6 +966,7 @@ export async function hostMultiplayer(
   await hostAwake(true);
   showHost(live);
   void watchBattery(live);
+  console.log('[openscr-mp] Raum offen', room.roomCode, 'Adresse', ip, 'Port', server?.port);
   emit('multiplayer.players', { players: room.players(), selfId: room.hostId, roomCode: room.roomCode });
   if (restored) {
     const row = await activeStore().read(appId);
@@ -1135,6 +1177,7 @@ export function showMultiplayerQr(
 ): { roomCode: string; qrPayload: string; gameUrl: string } {
   const session = requireSession(appId);
   if (session.role !== 'host') throw new Error('Nur der Host zeigt den QR-Code.');
+  console.log('[openscr-mp] QR zeigen', focus, 'Raum', session.roomCode, 'Gast', session.guestPhase, session.gameUrl || 'ohne Spiel-Adresse');
   showHost(session, focus);
   return { roomCode: session.roomCode, qrPayload: session.qrPayload, gameUrl: session.gameUrl };
 }

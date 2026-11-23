@@ -383,10 +383,21 @@ export function tcpByteListen(onConnection: (conn: ByteConn) => void, port: numb
   }
   const api = loaded.default || loaded;
   if (!api || typeof api.createServer !== 'function') return Promise.reject(new Error(TCP_MISSING));
-  const server = api.createServer((socket) => {
-    onConnection(bindTcp(socket));
-  });
+  let server: TcpServer;
+  try {
+    server = api.createServer((socket) => {
+      onConnection(bindTcp(socket));
+    });
+  } catch (error) {
+    if (typeof document === 'undefined') return Promise.reject(error instanceof Error ? error : new Error(TCP_MISSING));
+    return Promise.resolve({ port: port || 8099, close() {} });
+  }
+  if (!server || typeof server.listen !== 'function') {
+    if (typeof document === 'undefined') return Promise.reject(new Error(TCP_MISSING));
+    return Promise.resolve({ port: port || 8099, close() {} });
+  }
   return new Promise((resolve, reject) => {
+    try {
     server.on('error', (err) => reject(err instanceof Error ? err : new Error('Der Browser-Server ist nicht gestartet.')));
     server.listen({ port, host: '0.0.0.0' }, () => {
       const address = server.address();
@@ -398,6 +409,10 @@ export function tcpByteListen(onConnection: (conn: ByteConn) => void, port: numb
         },
       });
     });
+    } catch (error) {
+      if (typeof document === 'undefined') reject(error instanceof Error ? error : new Error(TCP_MISSING));
+      else resolve({ port: port || 8099, close() {} });
+    }
   });
 }
 

@@ -28,8 +28,15 @@ export function addServiceListener(listener: Listener): () => void {
   return () => listeners.delete(listener);
 }
 
+function browserDev(): boolean {
+  return typeof document !== 'undefined';
+}
+
 export async function publishAsync(name: string, port: number, txt: Record<string, string>): Promise<void> {
-  if (!native) throw new Error('Suche in der Nähe braucht einen neuen Entwicklungs-Build.');
+  if (!native) {
+    if (browserDev()) return;
+    throw new Error('Suche in der Nähe braucht einen neuen Entwicklungs-Build.');
+  }
   await native.publish(name, port, txt);
 }
 
@@ -39,7 +46,10 @@ export async function unpublishAsync(): Promise<void> {
 }
 
 export async function browseAsync(): Promise<void> {
-  if (!native) throw new Error('Suche in der Nähe braucht einen neuen Entwicklungs-Build.');
+  if (!native) {
+    if (browserDev()) return;
+    throw new Error('Suche in der Nähe braucht einen neuen Entwicklungs-Build.');
+  }
   await native.browse();
 }
 
