@@ -249,7 +249,7 @@ export function MultiplayerOverlay({ state, onDone, onEnd, onScanned, onCancel, 
 function GameLinkActions({ url }: { url: string }) {
   const [copied, setCopied] = useState(false);
   const copy = async () => {
-    await Clipboard.setStringAsync(url);
+    await Clipboard.setStringAsync(shareableGameUrl(url));
     setCopied(true);
     setTimeout(() => setCopied(false), 1600);
   };

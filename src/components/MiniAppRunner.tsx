@@ -542,7 +542,7 @@ export const MiniAppRunner = React.memo(MiniAppRunnerBase);
 
 function decodeBase64(value: string): Uint8Array {
   const buf = Buffer.from(value, 'base64');
-  return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
+  return Uint8Array.from(buf);
 }
 
 async function readMiniAppAsset(localPath: string, rel: string): Promise<{ mime: string; base64: string; text: string | null } | null> {

@@ -34,7 +34,9 @@ test('Spiel-QR bietet Kopieren und Teilen der Beitrittsadresse', () => {
   assert.doesNotMatch(overlay, /Komm in mein Spiel/);
   assert.doesNotMatch(overlay, /Share\.share\(\{[^}]*\burl:/);
   const join = 'http://192.168.178.94:42169/g/37acde606eedc0b8/';
-  assert.strictEqual(shareableGameUrl(join), 'http://192.168.178.94:42169/g/37acde606eedc0b8');
+  assert.strictEqual(shareableGameUrl(join), join);
+  assert.strictEqual(shareableGameUrl('http://192.168.178.94:42169/g/37acde606eedc0b8'), join);
+  assert.match(overlay, /Clipboard\.setStringAsync\(shareableGameUrl\(url\)\)/);
   assert.strictEqual(resolveGuestPath('/g/37acde606eedc0b8', '37acde606eedc0b8').ok, true);
   assert.match(overlay, /Share\.share/);
   assert.match(overlay, /expo-clipboard/);
@@ -124,11 +126,9 @@ test('echter Socket liefert die Gastseite', async () => {
     appId: 'wolf',
     room: 'K7QP',
     listen: nodeListen,
-    entry: 'index.html',
     read: async (rel) => {
-      if (rel === 'app.js') return { mime: 'text/javascript', body: utf8Encode('window.__spiel=1;') };
       if (rel) return null;
-      return { mime: 'text/html', body: utf8Encode('<html><head></head><body>Hi<script src="app.js"></script></body></html>') };
+      return { mime: 'text/html', body: utf8Encode('<html><head></head><body>Hi<script src="players.js"></script></body></html>') };
     },
     onLink() {},
   });
@@ -136,12 +136,65 @@ test('echter Socket liefert die Gastseite', async () => {
     const text = await httpGet(server.port, `/g/${token}/`);
     assert.match(text, /openscr-guest\.js/);
     assert.match(text, /Hi/);
-    assert.match(text, /window\.__spiel=1/);
-    assert.doesNotMatch(text, /src="app\.js"/);
+    assert.match(text, /src="players\.js"/);
     const missing = await httpGet(server.port, '/g/0000000000000000/');
     assert.match(missing, /^HTTP\/1\.1 404/);
     const gone = await httpGet(server.port, `/g/${token}/fehlt.js`);
     assert.match(gone, /Nicht gefunden: fehlt\.js/);
+  } finally {
+    server.close();
+  }
+});
+
+test('Gastserver liefert Shim, Skripte und Unterordner mit dem passenden Typ', async () => {
+  const token = 'fdc394d2f43ecd6d';
+  const files = new Map([
+    ['players.js', { mime: 'application/octet-stream', body: utf8Encode('window.players=1;') }],
+    ['stats.js', { mime: 'text/javascript', body: utf8Encode('window.stats=1;') }],
+    ['multiplayer.js', { mime: 'text/javascript', body: utf8Encode('window.mp=1;') }],
+    ['app.css', { mime: 'text/css', body: utf8Encode('body{color:red}') }],
+    ['assets/icon.png', { mime: 'application/octet-stream', body: Uint8Array.from([137, 80, 78, 71, 1, 2, 3]) }],
+    ['assets/sounds/correct.mp3', { mime: 'application/octet-stream', body: Uint8Array.from([255, 251, 144, 0, 1, 2]) }],
+    ['assets/sounds/buzzer.mp3', { mime: 'audio/mpeg', body: Uint8Array.from([255, 251, 144, 4]) }],
+    ['assets/sounds/wrong.mp3', { mime: 'audio/mpeg', body: Uint8Array.from([255, 251, 144, 5]) }],
+  ]);
+  const html = '<html><head></head><body><audio src="assets/sounds/correct.mp3"></audio><script src="players.js"></script><script src="stats.js"></script><script src="multiplayer.js"></script></body></html>';
+  const server = await openGuestServer({
+    token,
+    appId: 'song',
+    room: 'K7QP',
+    listen: nodeListen,
+    read: async (rel) => {
+      if (!rel) return { mime: 'text/html', body: utf8Encode(html) };
+      return files.get(rel) || null;
+    },
+    onLink() {},
+  });
+  try {
+    const page = await httpGet(server.port, `/g/${token}/`);
+    assert.match(page, /<base href="\/g\/fdc394d2f43ecd6d\/">/);
+    assert.match(page, /src="players\.js"/);
+    assert.match(page, /Datei nicht geladen/);
+    const paths = [
+      ['openscr-guest.js', 'text/javascript', 'OpenScrBridge'],
+      ['players.js', 'text/javascript', 'window.players=1'],
+      ['stats.js', 'text/javascript', 'window.stats=1'],
+      ['multiplayer.js', 'text/javascript', 'window.mp=1'],
+      ['app.css', 'text/css', 'color:red'],
+      ['assets/sounds/correct.mp3', 'audio/mpeg', null],
+      ['assets/sounds/buzzer.mp3', 'audio/mpeg', null],
+      ['assets/sounds/wrong.mp3', 'audio/mpeg', null],
+      ['assets/icon.png', 'image/png', null],
+    ];
+    const responses = await Promise.all(paths.map(([path]) => httpGet(server.port, `/g/${token}/${path}`)));
+    responses.forEach((raw, index) => {
+      const [path, mime, snippet] = paths[index];
+      assert.match(raw, /^HTTP\/1\.1 200/, path);
+      assert.match(raw, new RegExp(`content-type: ${mime}`), path);
+      if (snippet) assert.match(raw, new RegExp(snippet), path);
+    });
+    const mp3 = await httpGetRaw(server.port, `/g/${token}/assets/sounds/correct.mp3`);
+    assert.deepStrictEqual(Array.from(mp3.subarray(mp3.length - 6)), [255, 251, 144, 0, 1, 2]);
   } finally {
     server.close();
   }
@@ -301,13 +354,17 @@ function nodeListen(onConnection, port) {
 }
 
 function httpGet(port, path) {
+  return httpGetRaw(port, path).then((buf) => buf.toString('utf8'));
+}
+
+function httpGetRaw(port, path) {
   return new Promise((resolve, reject) => {
     const socket = net.connect(port, '127.0.0.1', () => {
       socket.write(`GET ${path} HTTP/1.1\r\nHost: phone\r\nConnection: close\r\n\r\n`);
     });
     const chunks = [];
     socket.on('data', (chunk) => chunks.push(chunk));
-    socket.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+    socket.on('end', () => resolve(Buffer.concat(chunks)));
     socket.on('error', reject);
   });
 }
