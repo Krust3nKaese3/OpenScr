@@ -60,6 +60,8 @@ test('WLAN-Code maskiert Sonderzeichen und bleibt leer ohne Namen', () => {
 test('Gastpfad verlangt das Token und verbietet Ausbrüche', () => {
   const token = '0123456789abcdef';
   assert.deepStrictEqual(resolveGuestPath(`/g/${token}/`, token), { ok: true, rel: '', websocket: false });
+  assert.deepStrictEqual(resolveGuestPath(`/g/${token}`, token), { ok: true, rel: '', websocket: false, redirect: `/g/${token}/` });
+  assert.deepStrictEqual(resolveGuestPath(`/g/${token}?x=1`, token), { ok: true, rel: '', websocket: false, redirect: `/g/${token}/?x=1` });
   assert.deepStrictEqual(resolveGuestPath(`/g/${token}/ws`, token), { ok: true, rel: 'ws', websocket: true });
   assert.deepStrictEqual(resolveGuestPath(`/g/${token}/js/app.js`, token), { ok: true, rel: 'js/app.js', websocket: false });
   assert.strictEqual(resolveGuestPath('/g/0000000000000000/', token).status, 404);
@@ -85,6 +87,8 @@ test('Gastseite setzt die Brücke und merkt sich die Identität', () => {
   assert.match(GUEST_SHIM_SOURCE, /storage:\s*null/);
   assert.match(GUEST_SHIM_SOURCE, /name = \(savedNow && savedNow\.name\) \|\| 'Gast';\s*connect\(\)/);
   const html = injectGuestDocument('<html><head></head><body>Spiel</body></html>', '0123456789abcdef', 'wolf', 'K7QP');
+  assert.match(html, /<base href="\/g\/0123456789abcdef\/">/);
+  assert.match(html, /openscr-guest-error/);
   assert.match(html, /openscr-guest\.js/);
   assert.match(html, /"appId":"wolf"/);
   assert.match(html, /Spiel/);
@@ -172,6 +176,28 @@ test('Browser-Gast bekommt nach Reload den letzten Spielstand, ein App-Gast nich
     assert.match(ui.batteryWarning, /Akku niedrig \(15 %\)/);
 
     const token = hosted.gameUrl.split('/g/')[1].replace(/\/$/, '');
+    const bare = fakeConn();
+    acceptGuest(bare);
+    bare.push(utf8Encode(`GET /g/${token} HTTP/1.1\r\nHost: phone\r\n\r\n`));
+    const moved = utf8Slice(bare.sent[0]);
+    assert.match(moved, /302 Found/);
+    assert.match(moved, new RegExp(`location: /g/${token}/`));
+    const doc = fakeConn();
+    acceptGuest(doc);
+    doc.push(utf8Encode(`GET /g/${token}/ HTTP/1.1\r\nHost: phone\r\n\r\n`));
+    await new Promise((resolve) => setImmediate(resolve));
+    const page = utf8Slice(doc.sent[0]);
+    assert.match(page, /200 OK/);
+    assert.match(page, new RegExp(`<base href="/g/${token}/">`));
+    assert.match(page, /openscr-guest\.js/);
+    assert.match(page, /spiel/);
+    const asset = fakeConn();
+    acceptGuest(asset);
+    asset.push(utf8Encode(`GET /g/${token}/openscr-guest.js HTTP/1.1\r\nHost: phone\r\n\r\n`));
+    await new Promise((resolve) => setImmediate(resolve));
+    const script = utf8Slice(asset.sent[0]);
+    assert.match(script, /content-type: text\/javascript/);
+    assert.match(script, /OpenScrBridge/);
     const first = fakeConn();
     acceptGuest(first);
     first.push(utf8Encode(
