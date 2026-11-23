@@ -169,10 +169,10 @@ export function MultiplayerOverlay({ state, onDone, onEnd, onScanned, onCancel, 
               <Text style={[styles.stepTitle, { color: tokens.text }]}>Spiel öffnen</Text>
             </View>
             <View style={[styles.gameCard, { backgroundColor: tokens.card }]}>
-              {state.gameUrl ? <QrBlock payload={state.gameUrl} size={220} /> : <Text style={[styles.gameText, { color: tokens.muted }]}>Der Browser-Server braucht einen Build mit TCP.</Text>}
+              <GuestJoin state={state} size={220} ink={tokens.text} muted={tokens.muted} spinner={tokens.lime} />
               <Text style={[styles.gameText, { color: tokens.text }]}>Scanne den Code mit der normalen Kamera. Du brauchst OpenScr nicht.</Text>
             </View>
-            {state.gameUrl ? <GameLinkActions url={state.gameUrl} /> : null}
+            {state.guestPhase === 'ready' && state.gameUrl ? <GameLinkActions url={state.gameUrl} /> : null}
             <TouchableOpacity onPress={() => setShowAppQr((value) => !value)}>
               <Text style={[styles.quiet, { color: tokens.muted }]}>{showAppQr ? 'App-Code ausblenden' : 'Code für die OpenScr-App'}</Text>
             </TouchableOpacity>
@@ -195,10 +195,10 @@ export function MultiplayerOverlay({ state, onDone, onEnd, onScanned, onCancel, 
               <Text style={[styles.stepTitle, { color: tokens.text }]}>Spiel öffnen</Text>
             </View>
             <View style={[styles.gameCard, { backgroundColor: tokens.card }]}>
-              {state.gameUrl ? <QrBlock payload={state.gameUrl} size={72} /> : <Text style={[styles.gameText, { color: tokens.muted }]}>Der Browser-Server braucht einen Build mit TCP.</Text>}
+              <GuestJoin state={state} size={72} ink={tokens.text} muted={tokens.muted} spinner={tokens.lime} />
               <Text style={[styles.gameText, { color: tokens.text }]}>Scanne den Code mit der normalen Kamera. Du brauchst OpenScr nicht.</Text>
             </View>
-            {state.gameUrl ? <GameLinkActions url={state.gameUrl} /> : null}
+            {state.guestPhase === 'ready' && state.gameUrl ? <GameLinkActions url={state.gameUrl} /> : null}
             <TouchableOpacity onPress={() => setShowAppQr((value) => !value)}>
               <Text style={[styles.quiet, { color: tokens.muted }]}>{showAppQr ? 'App-Code ausblenden' : 'Code für die OpenScr-App'}</Text>
             </TouchableOpacity>
@@ -243,6 +243,19 @@ export function MultiplayerOverlay({ state, onDone, onEnd, onScanned, onCancel, 
         )}
       </ScrollView>
     </View>
+  );
+}
+
+function GuestJoin({ state, size, ink, muted, spinner }: { state: MpUiState; size: number; ink: string; muted: string; spinner: string }) {
+  if (state.guestPhase === 'ready' && state.gameUrl) return <QrBlock payload={state.gameUrl} size={size} />;
+  if (state.guestPhase === 'failed') {
+    return <Text selectable style={[styles.gameText, { color: muted }]}>{state.guestError || 'Der Browser-Server braucht einen Build mit TCP.'}</Text>;
+  }
+  return (
+    <>
+      <ActivityIndicator color={spinner} />
+      <Text style={[styles.gameText, { color: ink }]}>Raum wird vorbereitet…</Text>
+    </>
   );
 }
 

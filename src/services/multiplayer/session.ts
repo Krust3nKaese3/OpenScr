@@ -11,7 +11,7 @@ import { encodeServiceTxt, matchRoom, visibleRooms, type DiscoveryPort, type Lan
 import { createMemoryRoomStore, loadUsable, publicResume, type PublicResume, type RoomStore, type StoredRoom } from './persist';
 import { setHostKeepAlive } from './hostKeepAlive';
 import { clearGuestContent, guestContent } from './guestContent';
-import { openGuestServer, tcpByteListen, type ByteListen, type GuestServer } from './guestServer';
+import { assertGuestServing, openGuestServer, tcpByteListen, type ByteListen, type GuestServer } from './guestServer';
 import { shareableGameUrl } from './guestHttp';
 import { clearInviteDraft } from './invite';
 import { readHostBattery, stopHotspot } from './lanShare';
@@ -24,6 +24,8 @@ export interface MpUiState {
   requestId?: string;
   askName?: string;
   gameUrl?: string;
+  guestPhase?: 'starting' | 'ready' | 'failed';
+  guestError?: string;
   batteryWarning?: string;
   connectedGuests?: number;
   qrFocus?: 'all' | 'wifi' | 'game' | 'hotspot';
@@ -76,6 +78,8 @@ interface LiveSession {
   guestServer: GuestServer | null;
   guestPort: number;
   gameUrl: string;
+  guestPhase: 'starting' | 'ready' | 'failed';
+  guestError: string;
   lanIp: string;
   snapshot: unknown | null;
   snapshotSeq: number;
@@ -247,6 +251,8 @@ function hostUi(session: LiveSession): MpUiState {
     qrPayload: session.qrPayload,
     roomCode: session.roomCode,
     gameUrl: session.gameUrl,
+    guestPhase: session.guestPhase,
+    guestError: session.guestError,
     batteryWarning: session.batteryWarning,
     connectedGuests: players.filter((player) => player.connected && !player.host).length,
   };
@@ -312,8 +318,9 @@ async function startBrowserGuest(session: LiveSession): Promise<void> {
       preferredPort: session.guestPort,
       listen,
       read: async (rel) => {
-        if (!content) return null;
-        return content.read(rel || content.entry);
+        const current = guestContent(session.appId) || content;
+        if (!current) return null;
+        return current.read(rel || current.entry);
       },
       onLink: (link) => {
         if (!live || live !== session || session.leaving) {
@@ -325,10 +332,27 @@ async function startBrowserGuest(session: LiveSession): Promise<void> {
     });
     session.guestServer = handle;
     session.guestPort = handle.port;
-    session.gameUrl = session.lanIp && isPrivateIPv4(session.lanIp) ? shareableGameUrl(handle.url(session.lanIp)) : '';
-  } catch {
+    session.guestPhase = 'starting';
+    session.gameUrl = '';
+    showHost(session);
+    if (!session.lanIp || !isPrivateIPv4(session.lanIp)) {
+      session.guestPhase = 'failed';
+      session.guestError = 'Keine private WLAN-Adresse. Der Beitrittscode bleibt leer.';
+      return;
+    }
+    if (!guestListenOverride) await assertGuestServing(handle.port, session.token);
+    session.gameUrl = shareableGameUrl(handle.url(session.lanIp));
+    session.guestPhase = 'ready';
+    session.guestError = '';
+    showHost(session);
+  } catch (error) {
+    session.guestServer?.close();
     session.guestServer = null;
     session.gameUrl = '';
+    session.guestPhase = 'failed';
+    session.guestError = error instanceof Error ? error.message : 'Der Gastserver ist nicht gestartet.';
+    console.warn(`[openscr-guest] ${session.guestError}`);
+    showHost(session);
   }
 }
 
@@ -493,6 +517,8 @@ function blankSession(partial: Partial<LiveSession> & Pick<LiveSession, 'appId' 
     guestServer: partial.guestServer ?? null,
     guestPort: partial.guestPort ?? 0,
     gameUrl: partial.gameUrl ?? '',
+    guestPhase: partial.guestPhase ?? 'starting',
+    guestError: partial.guestError ?? '',
     lanIp: partial.lanIp ?? '',
     snapshot: partial.snapshot ?? null,
     snapshotSeq: partial.snapshotSeq ?? 0,

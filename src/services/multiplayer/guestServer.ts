@@ -22,6 +22,8 @@ import {
 
 export interface ByteConn {
   send(chunk: Uint8Array): void;
+  /** Fertig, wenn alle bisherigen Bytes wirklich raus sind. Android schreibt asynchron. */
+  drain?(): Promise<void>;
   close(): void;
   onData(cb: (chunk: Uint8Array) => void): void;
   onClose(cb: () => void): void;
@@ -44,6 +46,18 @@ export interface GuestServer {
 
 const MAX_FILE = 8 * 1024 * 1024;
 const MAX_CONN = 32;
+const guestNotes: string[] = [];
+
+function noteGuest(message: string): void {
+  const line = `[openscr-guest] ${message}`;
+  console.warn(line);
+  guestNotes.push(message);
+  if (guestNotes.length > 6) guestNotes.shift();
+}
+
+export function guestErrorNotes(): string[] {
+  return guestNotes.slice();
+}
 
 export async function openGuestServer(opts: {
   token: string;
@@ -96,8 +110,11 @@ function bindHttp(
     if (mode === 'dead') return;
     mode = 'dead';
     link?.fireClose();
-    conn.close();
-    done();
+    const flushed = conn.drain ? conn.drain() : Promise.resolve();
+    void flushed.finally(() => {
+      conn.close();
+      done();
+    });
   };
   conn.onClose(fail);
   conn.onData((chunk) => {
@@ -151,8 +168,10 @@ function bindHttp(
       void serveFile(opts, target.rel).then((bytes) => {
         conn.send(bytes);
         fail();
-      }).catch(() => {
-        conn.send(textResponse(500, 'Datei nicht lesbar.'));
+      }).catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : 'Datei nicht lesbar.';
+        noteGuest(`GET ${target.rel || '/'} fehlgeschlagen: ${message}`);
+        conn.send(textResponse(500, message));
         fail();
       });
       return;
@@ -201,11 +220,66 @@ async function serveFile(
   if (file.body.length > MAX_FILE) return textResponse(413, 'Datei zu groß.');
   const fromPath = rel ? mimeForPath(rel) : '';
   const mime = (fromPath && fromPath !== 'application/octet-stream' ? fromPath : file.mime) || 'application/octet-stream';
+  let html = mime.startsWith('text/html') ? utf8Slice(file.body.slice()) : '';
+  if (html && guestNotes.length) {
+    const note = guestNotes.map((line) => line.replace(/[<>&]/g, '')).join('\n');
+    html = html.replace(/<head[^>]*>/i, (match) => `${match}<script>console.warn(${JSON.stringify(note)});</script>`);
+  }
   const payload = mime.startsWith('text/html')
-    ? utf8Encode(injectGuestDocument(utf8Slice(file.body.slice()), opts.token, opts.appId, opts.room))
+    ? utf8Encode(injectGuestDocument(html, opts.token, opts.appId, opts.room))
     : file.body.slice();
   const type = mime.startsWith('text/') || mime.includes('javascript') || mime.includes('json') ? `${mime}; charset=utf-8` : mime;
   return httpBytes(200, 'OK', { 'content-type': type }, payload);
+}
+
+/** Prüft vom Handy aus, dass diese Instanz die Seite und die Brücke wirklich sendet. */
+export async function assertGuestServing(port: number, token: string): Promise<void> {
+  let last = 'keine Antwort';
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    try {
+      const page = await localGet(port, `/g/${token}/`);
+      const shim = await localGet(port, `/g/${token}/openscr-guest.js`);
+      if (!page.startsWith('HTTP/1.1 200') && !page.startsWith('HTTP/1.0 200')) {
+        throw new Error(page.slice(0, 80) || 'leere Antwort');
+      }
+      if (!page.includes('openscr-guest.js')) throw new Error('Die Gastseite enthält die Brücke nicht.');
+      if (!shim.includes('200') || !shim.includes('OpenScrBridge')) throw new Error('openscr-guest.js kommt nicht an.');
+      return;
+    } catch (error) {
+      last = error instanceof Error ? error.message : 'keine Antwort';
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    }
+  }
+  throw new Error(last);
+}
+
+function localGet(port: number, path: string): Promise<string> {
+  const loaded = require('react-native-tcp-socket') as { createConnection?: Function; default?: { createConnection?: Function } };
+  const create = loaded.createConnection || loaded.default?.createConnection;
+  if (!create) return Promise.reject(new Error(TCP_MISSING));
+  return new Promise((resolve, reject) => {
+    const chunks: Uint8Array[] = [];
+    let settled = false;
+    const finish = (error?: Error) => {
+      if (settled) return;
+      settled = true;
+      if (error) reject(error);
+      else resolve(chunks.map((part) => utf8Slice(part)).join(''));
+    };
+    const socket = create({ port, host: '127.0.0.1', connectTimeout: 3000 }, () => {
+      socket.write(`GET ${path} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n`);
+    }) as TcpSocket;
+    const timer = setTimeout(() => finish(new Error('Der Gastserver antwortet nicht.')), 3000);
+    socket.on('data', (data) => chunks.push(toBytes(data)));
+    socket.on('error', (err) => {
+      clearTimeout(timer);
+      finish(err instanceof Error ? err : new Error('Der Gastserver antwortet nicht.'));
+    });
+    socket.on('close', () => {
+      clearTimeout(timer);
+      finish(chunks.length ? undefined : new Error('Der Gastserver hat keine Daten gesendet.'));
+    });
+  });
 }
 
 function textResponse(status: number, message: string): Uint8Array {
@@ -300,7 +374,7 @@ interface TcpServer {
 }
 
 interface TcpSocket {
-  write: (frame: string | Uint8Array) => void;
+  write: (frame: string | Uint8Array, encoding?: string, cb?: (err?: Error) => void) => void;
   destroy: () => void;
   on: (event: string, cb: (data?: unknown) => void) => void;
 }
@@ -320,6 +394,7 @@ function bindTcp(socket: TcpSocket): ByteConn {
   const dataListeners: ((chunk: Uint8Array) => void)[] = [];
   const closeListeners: (() => void)[] = [];
   let closed = false;
+  let tail = Promise.resolve();
   const fireClose = () => {
     if (closed) return;
     closed = true;
@@ -329,16 +404,30 @@ function bindTcp(socket: TcpSocket): ByteConn {
     const bytes = toBytes(data);
     dataListeners.forEach((cb) => cb(bytes));
   });
-  socket.on('error', () => fireClose());
+  socket.on('error', (err) => {
+    noteGuest(err instanceof Error ? err.message : 'Socketfehler');
+    fireClose();
+  });
   socket.on('close', () => fireClose());
   return {
     send(chunk) {
-      if (closed) return;
-      try {
-        socket.write(typeof Buffer !== 'undefined' ? Buffer.from(chunk) : chunk);
-      } catch {
-        fireClose();
-      }
+      const body = chunk.slice();
+      tail = tail.then(() => new Promise<void>((resolve) => {
+        if (closed) {
+          resolve();
+          return;
+        }
+        try {
+          const buf = typeof Buffer !== 'undefined' ? Buffer.from(body) : body;
+          socket.write(buf, undefined, () => resolve());
+        } catch (error) {
+          noteGuest(error instanceof Error ? error.message : 'Senden fehlgeschlagen');
+          resolve();
+        }
+      }));
+    },
+    drain() {
+      return tail;
     },
     close() {
       try { socket.destroy(); } catch { /* schon zu */ }
