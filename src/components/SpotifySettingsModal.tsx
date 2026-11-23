@@ -102,7 +102,15 @@ export const SpotifySettingsModal: React.FC<Props> = ({ visible, onClose }) => {
           </View>
         </View>
       </Modal>
-      <SpotifyClientIdTutorial visible={visible && tutorial} onClose={() => setTutorial(false)} />
+      <SpotifyClientIdTutorial
+        visible={visible && tutorial}
+        onClose={() => setTutorial(false)}
+        onSaved={(info) => {
+          setValue(info.settingsClientId ?? '');
+          const shown = info.clientId ? `${info.clientId} (${spotifyClientIdSourceLabel(info.source)})` : 'keine';
+          setActive(shown);
+        }}
+      />
     </>
   );
 };

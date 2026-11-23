@@ -1,13 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Alert,
+  Dimensions,
   Image,
+  Linking,
   Modal,
   ScrollView,
   StyleSheet,
-  Linking,
   Text,
+  TextInput,
   TouchableOpacity,
-  useWindowDimensions,
   View,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
@@ -22,11 +24,14 @@ import {
   readRunningAndroidPackage,
   spotifyAndroidDashboardTarget,
   SpotifyAndroidDashboardTarget,
+  SpotifyClientIdInfo,
 } from '../services/spotifyClientId';
+import { getSpotifyClientId, setSpotifySettingsClientId } from '../services/spotifySettings';
 
 interface Props {
   visible: boolean;
   onClose: () => void;
+  onSaved?: (info: SpotifyClientIdInfo) => void;
 }
 
 const DASHBOARD_SHOT = require('../../assets/spotify-tutorial/android-packages-sha1.png');
@@ -35,9 +40,8 @@ const DASHBOARD_SHOT = require('../../assets/spotify-tutorial/android-packages-s
 const SHOT_WIDTH = 920;
 const SHOT_HEIGHT = Math.round(SHOT_WIDTH * (494 / 1866));
 
-export const SpotifyClientIdTutorial: React.FC<Props> = ({ visible, onClose }) => {
-  const { height } = useWindowDimensions();
-  const sheetHeight = Math.round(height * 0.92);
+export const SpotifyClientIdTutorial: React.FC<Props> = ({ visible, onClose, onSaved }) => {
+  const sheetHeight = Math.round(Dimensions.get('window').height * 0.92);
   const target = useMemo(() => spotifyAndroidDashboardTarget(readRunningAndroidPackage()), []);
   const dev = useMemo(() => spotifyAndroidDashboardTarget(DEVELOPMENT_ANDROID_PACKAGE), []);
   const prod = useMemo(() => spotifyAndroidDashboardTarget(PRODUCTION_ANDROID_PACKAGE), []);
@@ -130,8 +134,9 @@ export const SpotifyClientIdTutorial: React.FC<Props> = ({ visible, onClose }) =
             <Step n={8} title="Client ID hier einfügen">
               <Text style={styles.body}>
                 Nach dem Anlegen die Client ID kopieren. Das sind 32 Hex-Zeichen.
-                In das Feld auf diesem Bildschirm einfügen und auf Speichern tippen.
+                Hier einfügen und auf Speichern tippen. Dieselbe ID gilt in den Spotify-Einstellungen.
               </Text>
+              <GuideClientIdField visible={visible} onSaved={onSaved} />
             </Step>
 
             <Step n={9} title="Spotify-App und Premium">
@@ -210,6 +215,65 @@ function ProductionFingerprints({ packageName }: { packageName: string }) {
         Pro Wert eine Zeile, immer mit dem Paket {packageName}.
         Welchen der beiden Play-Schlüssel die installierte APK meldet, ist noch offen, deshalb beide eintragen.
       </Text>
+    </View>
+  );
+}
+
+function GuideClientIdField({ visible, onSaved }: { visible: boolean; onSaved?: (info: SpotifyClientIdInfo) => void }) {
+  const [value, setValue] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    if (!visible) return undefined;
+    let gone = false;
+    void getSpotifyClientId().then((info) => {
+      if (!gone) setValue(info.settingsClientId ?? '');
+    }).catch(() => undefined);
+    return () => { gone = true; };
+  }, [visible]);
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      const info = await setSpotifySettingsClientId(value);
+      setValue(info.settingsClientId ?? '');
+      setSaved(true);
+      onSaved?.(info);
+      if (info.needsBuild) {
+        Alert.alert('Spotify', 'Client ID im Container gespeichert. Login und Wiedergabe brauchen den Build mit dem Spotify-Modul.');
+      }
+    } catch (e: any) {
+      setSaved(false);
+      Alert.alert('Spotify', e?.message || 'Speichern fehlgeschlagen');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <View>
+      <TextInput
+        style={styles.input}
+        value={value}
+        onChangeText={(next) => { setSaved(false); setValue(next); }}
+        autoCapitalize="none"
+        autoCorrect={false}
+        spellCheck={false}
+        placeholder="32 Hex-Zeichen"
+        editable={!busy}
+        accessibilityLabel="Spotify Client ID"
+      />
+      <TouchableOpacity
+        onPress={() => { void save(); }}
+        disabled={busy}
+        accessibilityRole="button"
+        accessibilityLabel="Client ID speichern"
+        style={styles.saveBtn}
+      >
+        <Text style={styles.copyBtnText}>{busy ? 'Speichert …' : 'Speichern'}</Text>
+      </TouchableOpacity>
+      {saved ? <Text style={styles.savedText}>Gespeichert</Text> : null}
     </View>
   );
 }
@@ -319,4 +383,7 @@ const styles = StyleSheet.create({
   valueActions: { flexDirection: 'row', flexWrap: 'wrap' },
   copyBtn: { alignSelf: 'flex-start', marginTop: 8, marginRight: 8, backgroundColor: '#1DB954', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
   copyBtnText: { color: 'white', fontWeight: '700', fontSize: 13 },
+  input: { marginTop: 8, borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 12, fontFamily: 'monospace', color: '#111', backgroundColor: 'white' },
+  saveBtn: { alignSelf: 'flex-start', marginTop: 8, backgroundColor: '#1DB954', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 },
+  savedText: { marginTop: 6, fontSize: 13, fontWeight: '700', color: '#0b7a32' },
 });
