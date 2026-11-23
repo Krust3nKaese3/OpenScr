@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -78,6 +78,7 @@ export const HomeScreen: React.FC = () => {
   const [repoUrl, setRepoUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [selectedApp, setSelectedApp] = useState<MiniApp | null>(null);
+  const closeSelectedApp = useCallback(() => setSelectedApp(null), []);
   const [showFolderModal, setShowFolderModal] = useState(false);
   const [debugLines, setDebugLines] = useState<string[] | null>(null);
   const [showSpotifySettings, setShowSpotifySettings] = useState(false);
@@ -555,7 +556,7 @@ export const HomeScreen: React.FC = () => {
   return (
     <View style={[styles.container, { backgroundColor: tokens.bg }]}>
       {selectedApp ? (
-        <MiniAppRunner key={selectedApp.id} app={selectedApp} onClose={() => setSelectedApp(null)} />
+        <MiniAppRunner key={selectedApp.id} app={selectedApp} onClose={closeSelectedApp} />
       ) : (
         <>
           <View style={styles.header}>

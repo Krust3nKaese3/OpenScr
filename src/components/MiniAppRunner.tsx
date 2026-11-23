@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
-import { View, StyleSheet, StatusBar, BackHandler, ActivityIndicator, Text, ScrollView, TouchableOpacity, Platform, useWindowDimensions, AppState } from 'react-native';
+import { View, StyleSheet, StatusBar, BackHandler, ActivityIndicator, Text, ScrollView, TouchableOpacity, Platform, Dimensions, AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import WebView, { WebViewMessageEvent } from 'react-native-webview';
 import * as ScreenOrientation from 'expo-screen-orientation';
@@ -19,6 +19,7 @@ import { learningPaneHeights, permissionsOfferedOnPlatform, showsLearningChrome 
 import { cancelMpScan, detachMultiplayer, dismissMpUi, endRoom, submitMpScan, subscribeMpUi, subscribeHostPresence, approveJoin, denyJoin, resumeMultiplayer, showMultiplayerQr, type HostPresence, type MpUiState } from '../services/multiplayer/session';
 import { setGuestContent } from '../services/multiplayer/guestContent';
 import { applyShowOverLock, publishOverLockNotice, readShowOverLockMap, shouldShowOverLock, showOverLockEnabled, SHOW_OVER_LOCK_KEY } from '../services/showOverLock';
+import { stableWebViewHtml } from '../services/webViewSource';
 import { spotifyReconnectQuiet } from '../services/spotifySettings';
 import { shouldResumeSpotifyRemote } from '../services/spotifyClientId';
 import {
@@ -39,7 +40,7 @@ interface MiniAppRunnerProps {
   onClose: () => void;
 }
 
-export const MiniAppRunner: React.FC<MiniAppRunnerProps> = ({ app, onClose }) => {
+const MiniAppRunnerBase: React.FC<MiniAppRunnerProps> = ({ app, onClose }) => {
   const webViewRef = useRef<WebView<any>>(null);
   const [loading, setLoading] = useState(true);
   const [html, setHtml] = useState<string>('');
@@ -57,7 +58,9 @@ export const MiniAppRunner: React.FC<MiniAppRunnerProps> = ({ app, onClose }) =>
   const [error, setError] = useState<{ message: string; stack?: string } | null>(null);
   const [showSource, setShowSource] = useState(false);
   const learning = showsLearningChrome(Platform.OS);
-  const panes = learningPaneHeights(useWindowDimensions().height);
+  // One-shot height. A live window subscription would re-render when the keyboard opens.
+  const panes = learningPaneHeights(Dimensions.get('window').height);
+  const htmlSource = useRef<{ html: string } | null>(null);
   const leaveScrapp = () => {
     applyShowOverLock(false);
     onClose();
@@ -447,7 +450,7 @@ export const MiniAppRunner: React.FC<MiniAppRunnerProps> = ({ app, onClose }) =>
       ) : (
         <WebView
           ref={webViewRef}
-          source={{ html }}
+          source={(htmlSource.current = stableWebViewHtml(htmlSource.current, html))}
           style={styles.webview}
           onMessage={handleMessage}
           onLoadEnd={() => { webLoadedRef.current = true; setTimeout(deliverDeepLink, 300); }}
@@ -534,6 +537,8 @@ export const MiniAppRunner: React.FC<MiniAppRunnerProps> = ({ app, onClose }) =>
     </View>
   );
 };
+
+export const MiniAppRunner = React.memo(MiniAppRunnerBase);
 
 function decodeBase64(value: string): Uint8Array {
   const buf = Buffer.from(value, 'base64');
