@@ -864,7 +864,7 @@ object SpotifyRuntime {
       error is CouldNotFindSpotifyApp || blob.contains("CouldNotFindSpotifyApp") -> SpotifyText.NOT_INSTALLED
       error is NotLoggedInException || reason == AppProtocol.ErrorUri.ERROR_NOT_LOGGED_IN -> SpotifyText.NOT_LOGGED_IN
       error is UserNotAuthorizedException || reason == AppProtocol.ErrorUri.ERROR_USER_NOT_AUTHORIZED -> SpotifyText.NOT_AUTHORIZED
-      error is AuthenticationFailedException || reason == AppProtocol.ErrorUri.ERROR_AUTHENTICATION_FAILED -> SpotifyText.authFailed(ctx)
+      error is AuthenticationFailedException || reason == AppProtocol.ErrorUri.ERROR_AUTHENTICATION_FAILED -> SpotifyText.authFailed(ctx())
       error is OfflineModeException || reason == AppProtocol.ErrorUri.ERROR_OFFLINE_MODE_ACTIVE -> SpotifyText.OFFLINE
       error is SpotifyDisconnectedException || error is SpotifyConnectionTerminatedException -> SpotifyText.DISCONNECTED
       reason == AppProtocol.ErrorUri.ERROR_INVALID_URI -> SpotifyText.BAD_URI
