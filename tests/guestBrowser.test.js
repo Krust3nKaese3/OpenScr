@@ -29,6 +29,7 @@ const { createMemoryRoomStore } = require('../src/services/multiplayer/persist.t
 
 test('Spiel-QR bietet Kopieren und Teilen der Beitrittsadresse', () => {
   const overlay = require('node:fs').readFileSync(require('node:path').join(__dirname, '../src/components/MultiplayerOverlay.tsx'), 'utf8');
+  assert.match(overlay, /Raum wird vorbereitet/);
   assert.match(overlay, /Link kopieren/);
   assert.match(overlay, /Share\.share\(\{ message: shareableGameUrl\(url\) \}\)/);
   assert.doesNotMatch(overlay, /Komm in mein Spiel/);
@@ -186,15 +187,56 @@ test('Gastserver liefert Shim, Skripte und Unterordner mit dem passenden Typ', a
       ['assets/sounds/wrong.mp3', 'audio/mpeg', null],
       ['assets/icon.png', 'image/png', null],
     ];
-    const responses = await Promise.all(paths.map(([path]) => httpGet(server.port, `/g/${token}/${path}`)));
+    const burst = paths.flatMap((item) => [item, item, item, item]);
+    const responses = await Promise.all(burst.map(([path]) => httpGet(server.port, `/g/${token}/${path}`)));
     responses.forEach((raw, index) => {
-      const [path, mime, snippet] = paths[index];
+      const [path, mime, snippet] = burst[index];
       assert.match(raw, /^HTTP\/1\.1 200/, path);
       assert.match(raw, new RegExp(`content-type: ${mime}`), path);
+      assert.match(raw, /content-length: \d+/, path);
       if (snippet) assert.match(raw, new RegExp(snippet), path);
     });
     const mp3 = await httpGetRaw(server.port, `/g/${token}/assets/sounds/correct.mp3`);
     assert.deepStrictEqual(Array.from(mp3.subarray(mp3.length - 6)), [255, 251, 144, 0, 1, 2]);
+  } finally {
+    server.close();
+  }
+});
+
+test('Antwort wird nicht verworfen, wenn das Socket erst nach dem Schreiben schließt', async () => {
+  const token = '0123456789abcdef';
+  let accept = null;
+  const server = await openGuestServer({
+    token,
+    appId: 'song',
+    room: 'K7QP',
+    listen(onConnection) {
+      accept = onConnection;
+      return Promise.resolve({ port: 9, close() {} });
+    },
+    read: async (rel) => (rel ? { mime: 'text/plain', body: utf8Encode('ok-datei') } : null),
+    onLink() {},
+  });
+  const queued = [];
+  const conn = {
+    sent: [],
+    send(chunk) { queued.push(chunk); },
+    drain() {
+      this.sent.push(...queued.splice(0));
+      return Promise.resolve();
+    },
+    close() { queued.splice(0); },
+    onData(cb) { this.push = cb; },
+    onClose() {},
+  };
+  try {
+    accept(conn);
+    conn.push(utf8Encode(`GET /g/${token}/players.js HTTP/1.1\r\nHost: phone\r\n\r\n`));
+    await new Promise((resolve) => setImmediate(resolve));
+    const raw = utf8Slice(conn.sent[0] || new Uint8Array());
+    assert.match(raw, /200 OK/);
+    assert.match(raw, /ok-datei/);
+    assert.match(raw, /content-length: 8/);
   } finally {
     server.close();
   }
