@@ -20,20 +20,17 @@ export function gameUrl(ip: string, port: number, token: string): string {
   return `http://${ip}:${port}/g/${token}/`;
 }
 
-/** WhatsApp linkifies a URL better when nothing follows it and it has no trailing slash. */
+/** Join URL with the directory slash, so relative scrapp files resolve. */
 export function shareableGameUrl(url: string): string {
-  if (!url.endsWith('/')) return url;
-  const without = url.slice(0, -1);
-  let pathname = '';
+  if (!url) return '';
   try {
-    pathname = new URL(without).pathname;
+    const parsed = new URL(url);
+    const parts = parsed.pathname.split('/');
+    if (parts[1] === 'g' && parts[2] && parts.length === 3) parsed.pathname = `/g/${parts[2]}/`;
+    return parsed.href;
   } catch {
-    return url;
+    return url.endsWith('/') ? url : `${url}/`;
   }
-  const token = pathname.split('/')[2] || '';
-  const resolved = resolveGuestPath(pathname, token);
-  if (resolved.ok && resolved.rel === '' && !resolved.websocket) return without;
-  return url;
 }
 
 const GUEST_ERROR_WATCH = `<script>(function(){function box(){var wrap=document.getElementById('openscr-guest-error');if(wrap)return wrap;wrap=document.createElement('div');wrap.id='openscr-guest-error';wrap.setAttribute('style','position:fixed;left:8px;right:8px;top:8px;max-height:70vh;overflow:auto;z-index:2147483647;background:#1c140c;color:#fff;padding:12px;border-radius:12px;font:14px/1.4 ui-monospace,monospace');var pre=document.createElement('pre');pre.id='openscr-guest-error-text';pre.setAttribute('style','white-space:pre-wrap;margin:0 0 8px;user-select:text;-webkit-user-select:text');var btn=document.createElement('button');btn.type='button';btn.textContent='Kopieren';btn.setAttribute('style','font:14px sans-serif;padding:6px 10px');btn.addEventListener('click',function(){var text=pre.textContent||'';var ok=function(){btn.textContent='Kopiert';};if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(ok,function(){});return;}ok();});wrap.appendChild(pre);wrap.appendChild(btn);(document.body||document.documentElement).appendChild(wrap);return wrap;}function show(text){var pre=box().querySelector('pre');if(!pre||pre.textContent.indexOf(text+'\\n')!==-1)return;pre.textContent+=text+'\\n';}window.addEventListener('error',function(event){var el=event.target;var url=el&&el!==window?(el.currentSrc||el.src||el.href||''):'';if(url){show('Datei nicht geladen: '+url);return;}var where=event.filename?' ('+event.filename+':'+(event.lineno||0)+')':'';show(String((event.error&&event.error.stack)||event.message||'Skriptfehler')+where);},true);window.addEventListener('unhandledrejection',function(event){var reason=event.reason;show(String((reason&&reason.stack)||reason||'Promise abgelehnt'));});})();</script>`;

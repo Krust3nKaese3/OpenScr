@@ -12,6 +12,7 @@ import { createMemoryRoomStore, loadUsable, publicResume, type PublicResume, typ
 import { setHostKeepAlive } from './hostKeepAlive';
 import { clearGuestContent, guestContent } from './guestContent';
 import { openGuestServer, tcpByteListen, type ByteListen, type GuestServer } from './guestServer';
+import { shareableGameUrl } from './guestHttp';
 import { clearInviteDraft } from './invite';
 import { readHostBattery, stopHotspot } from './lanShare';
 import { HOST_AWAKE_TAG, setKeepAwake } from '../keepAwake';
@@ -310,7 +311,6 @@ async function startBrowserGuest(session: LiveSession): Promise<void> {
       room: session.roomCode,
       preferredPort: session.guestPort,
       listen,
-      entry: content?.entry,
       read: async (rel) => {
         if (!content) return null;
         return content.read(rel || content.entry);
@@ -325,7 +325,7 @@ async function startBrowserGuest(session: LiveSession): Promise<void> {
     });
     session.guestServer = handle;
     session.guestPort = handle.port;
-    session.gameUrl = session.lanIp && isPrivateIPv4(session.lanIp) ? handle.url(session.lanIp) : '';
+    session.gameUrl = session.lanIp && isPrivateIPv4(session.lanIp) ? shareableGameUrl(handle.url(session.lanIp)) : '';
   } catch {
     session.guestServer = null;
     session.gameUrl = '';
