@@ -4,6 +4,7 @@ import {
   Modal,
   ScrollView,
   StyleSheet,
+  Linking,
   Text,
   TouchableOpacity,
   useWindowDimensions,
@@ -222,9 +223,14 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
   );
 }
 
+function isBrowserUrl(value: string): boolean {
+  return /^https?:\/\//i.test(value);
+}
+
 function CopyValue({ label, value }: { label: string; value: string }) {
   const [copied, setCopied] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const browserUrl = isBrowserUrl(value);
 
   useEffect(() => () => {
     if (timer.current) clearTimeout(timer.current);
@@ -241,18 +247,38 @@ function CopyValue({ label, value }: { label: string; value: string }) {
     }
   };
 
+  const open = () => {
+    void Linking.openURL(value).catch(() => undefined);
+  };
+
   return (
     <View style={styles.valueBox}>
       <Text style={styles.valueLabel}>{label}</Text>
-      <Text selectable style={styles.valueText}>{value}</Text>
-      <TouchableOpacity
-        onPress={copy}
-        accessibilityRole="button"
-        accessibilityLabel={`${label} kopieren`}
-        style={styles.copyBtn}
-      >
-        <Text style={styles.copyBtnText}>{copied ? 'Kopiert' : 'Kopieren'}</Text>
-      </TouchableOpacity>
+      {browserUrl ? (
+        <Text accessibilityRole="link" onPress={open} style={[styles.valueText, styles.linkText]}>{value}</Text>
+      ) : (
+        <Text selectable style={styles.valueText}>{value}</Text>
+      )}
+      <View style={styles.valueActions}>
+        {browserUrl ? (
+          <TouchableOpacity
+            onPress={open}
+            accessibilityRole="link"
+            accessibilityLabel={`${label} im Browser öffnen`}
+            style={styles.copyBtn}
+          >
+            <Text style={styles.copyBtnText}>Öffnen</Text>
+          </TouchableOpacity>
+        ) : null}
+        <TouchableOpacity
+          onPress={copy}
+          accessibilityRole="button"
+          accessibilityLabel={`${label} kopieren`}
+          style={styles.copyBtn}
+        >
+          <Text style={styles.copyBtnText}>{copied ? 'Kopiert' : 'Kopieren'}</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -289,6 +315,8 @@ const styles = StyleSheet.create({
   },
   valueLabel: { fontSize: 12, fontWeight: '600', color: '#444', marginBottom: 4 },
   valueText: { fontSize: 13, lineHeight: 18, color: '#111', fontFamily: 'monospace' },
-  copyBtn: { alignSelf: 'flex-start', marginTop: 8, backgroundColor: '#1DB954', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
+  linkText: { color: '#0b6e2f', textDecorationLine: 'underline' },
+  valueActions: { flexDirection: 'row', flexWrap: 'wrap' },
+  copyBtn: { alignSelf: 'flex-start', marginTop: 8, marginRight: 8, backgroundColor: '#1DB954', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
   copyBtnText: { color: 'white', fontWeight: '700', fontSize: 13 },
 });
