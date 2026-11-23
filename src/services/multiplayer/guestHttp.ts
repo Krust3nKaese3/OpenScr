@@ -2,7 +2,6 @@
  * HTTP- und WebSocket-Bausteine für Browser-Gäste.
  * Der Host spricht weiter das NDJSON-Protokoll. Der Browser bekommt dieselben Rahmen als WebSocket-Text.
  */
-import { createHash } from 'crypto';
 import { scriptJson } from '../../bridge/scriptJson';
 import { sameSecret } from './guard';
 
@@ -85,8 +84,91 @@ export function parseHttpHead(buffer: Uint8Array): HttpHead | null | { error: st
   return { method: match[1], target: match[2], headers, rest: buffer.slice(marker + 4) };
 }
 
+function rotl(n: number, s: number): number {
+  return ((n << s) | (n >>> (32 - s))) >>> 0;
+}
+
+/** SHA-1, enough for the WebSocket accept key. Metro cannot bundle Node's crypto. */
+function sha1Bytes(input: Uint8Array): Uint8Array {
+  const length = input.length;
+  const blocks = Math.ceil((length + 9) / 64) * 64;
+  const data = new Uint8Array(blocks);
+  data.set(input);
+  data[length] = 0x80;
+  const view = new DataView(data.buffer);
+  const bits = length * 8;
+  view.setUint32(blocks - 8, Math.floor(bits / 0x100000000));
+  view.setUint32(blocks - 4, bits >>> 0);
+  let h0 = 0x67452301;
+  let h1 = 0xefcdab89;
+  let h2 = 0x98badcfe;
+  let h3 = 0x10325476;
+  let h4 = 0xc3d2e1f0;
+  const w = new Uint32Array(80);
+  for (let offset = 0; offset < blocks; offset += 64) {
+    for (let t = 0; t < 16; t += 1) w[t] = view.getUint32(offset + t * 4);
+    for (let t = 16; t < 80; t += 1) w[t] = rotl(w[t - 3] ^ w[t - 8] ^ w[t - 14] ^ w[t - 16], 1);
+    let a = h0;
+    let b = h1;
+    let c = h2;
+    let d = h3;
+    let e = h4;
+    for (let t = 0; t < 80; t += 1) {
+      let f = 0;
+      let k = 0;
+      if (t < 20) {
+        f = (b & c) | (~b & d);
+        k = 0x5a827999;
+      } else if (t < 40) {
+        f = b ^ c ^ d;
+        k = 0x6ed9eba1;
+      } else if (t < 60) {
+        f = (b & c) | (b & d) | (c & d);
+        k = 0x8f1bbcdc;
+      } else {
+        f = b ^ c ^ d;
+        k = 0xca62c1d6;
+      }
+      const temp = (rotl(a, 5) + (f >>> 0) + e + k + w[t]) >>> 0;
+      e = d;
+      d = c;
+      c = rotl(b, 30);
+      b = a;
+      a = temp;
+    }
+    h0 = (h0 + a) >>> 0;
+    h1 = (h1 + b) >>> 0;
+    h2 = (h2 + c) >>> 0;
+    h3 = (h3 + d) >>> 0;
+    h4 = (h4 + e) >>> 0;
+  }
+  const out = new Uint8Array(20);
+  const hashed = new DataView(out.buffer);
+  hashed.setUint32(0, h0);
+  hashed.setUint32(4, h1);
+  hashed.setUint32(8, h2);
+  hashed.setUint32(12, h3);
+  hashed.setUint32(16, h4);
+  return out;
+}
+
+function base64(bytes: Uint8Array): string {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  let text = '';
+  for (let i = 0; i < bytes.length; i += 3) {
+    const b0 = bytes[i];
+    const b1 = i + 1 < bytes.length ? bytes[i + 1] : 0;
+    const b2 = i + 2 < bytes.length ? bytes[i + 2] : 0;
+    const n = (b0 << 16) | (b1 << 8) | b2;
+    text += alphabet[(n >> 18) & 63] + alphabet[(n >> 12) & 63];
+    text += i + 1 < bytes.length ? alphabet[(n >> 6) & 63] : '=';
+    text += i + 2 < bytes.length ? alphabet[n & 63] : '=';
+  }
+  return text;
+}
+
 export function wsAcceptKey(clientKey: string): string {
-  return createHash('sha1').update(`${clientKey}${WS_GUID}`).digest('base64');
+  return base64(sha1Bytes(utf8Encode(`${clientKey}${WS_GUID}`)));
 }
 
 export function httpBytes(status: number, reason: string, headers: Record<string, string>, body: Uint8Array): Uint8Array {

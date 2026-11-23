@@ -11,7 +11,7 @@
         "buildType": "apk"
       },
       "env": {
-        "APP_VARIANT": "development",
+        "APP_VARIANT": "dev",
         "EXPO_PUBLIC_GITHUB_CLIENT_ID": "Ov23liZBUKxpmryUJW1a"
       }
     },

@@ -34,7 +34,8 @@ test('add links on both schemes are reserved', () => {
   }
   assert.strictEqual(D.parseDeepLink('exp+openscr://expo-development-client/?url=' + q), null);
   assert.strictEqual(D.classifyDeepLink('exp+openscr://expo-development-client/?url=' + q).type, 'ignore');
-  const spotify = D.parseDeepLink('openscr://spotify-callback?code=abc');
+  assert.strictEqual(D.parseDeepLink('openscrdev://add?url=' + q).miniapp, 'add');
+  const spotify = D.parseDeepLink('openscrdev://spotify-callback?code=abc');
   assert.strictEqual(spotify.miniapp, 'spotify-callback');
   assert.strictEqual(spotify.params.code, 'abc');
   assert.strictEqual(D.classifyDeepLink('openscr://spotify-callback?code=abc').type, 'miniapp');

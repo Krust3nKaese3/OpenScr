@@ -18,7 +18,13 @@ object SpotifyText {
   const val NEED_LOGIN = "Spotify ist nicht angemeldet. Bitte zuerst spotify.login() aufrufen."
   const val AUTH_CANCELLED = "Spotify-Anmeldung abgebrochen."
   const val AUTH_DENIED = "Die Spotify-Anmeldung wurde abgelehnt."
-  const val AUTH_FAILED = "Spotify-Anmeldung fehlgeschlagen. Client ID, Redirect-URI openscr://spotify-callback und den SHA1 im Spotify-Dashboard prüfen."
+  fun redirectUri(ctx: Context): String {
+    val scheme = if (ctx.packageName.endsWith(".dev")) "openscrdev" else "openscr"
+    return "$scheme://spotify-callback"
+  }
+
+  fun authFailed(ctx: Context): String =
+    "Spotify-Anmeldung fehlgeschlagen. Client ID, Redirect-URI ${redirectUri(ctx)} und den SHA1 im Spotify-Dashboard prüfen."
   const val NOT_AUTHORIZED = "Spotify hat die Fernsteuerung nicht erlaubt. Bitte die Anmeldung bestätigen."
   const val AUTH_NEEDS_UNLOCK = "Die erste Spotify-Freigabe braucht ein entsperrtes Handy. Danach verbindet sich die Steuerung auch über dem Sperrbildschirm wieder, ohne die PIN."
   const val NOT_LOGGED_IN = "In der Spotify-App ist niemand angemeldet. Bitte Spotify öffnen und anmelden."

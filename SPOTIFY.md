@@ -9,7 +9,7 @@ Es gibt **kein Client-Secret** in diesem Repo. Die Client ID ist öffentlich und
 Am Computer geht das leichter als auf dem Handy: [Spotify Developer Dashboard](https://developer.spotify.com/dashboard). Die Client ID fügst du danach in OpenScr ein. Dieselben Schritte, mit den Werten der gerade laufenden App, stehen in OpenScr auf dem Startbildschirm unter **Spotify** hinter dem Knopf **Anleitung**.
 
 1. App anlegen und **Web API** sowie **Android SDK** auswählen. Nicht das Web Playback SDK.
-2. Redirect-URI exakt: `openscr://spotify-callback`
+2. Redirect-URI der laufenden App. Production **OpenScr**: `openscr://spotify-callback`. **OpenScr Dev** (`APP_VARIANT=dev`, Paket `com.openscr.app.dev`) braucht einen eigenen Dashboard-Eintrag mit der Redirect-URI `openscrdev://spotify-callback`.
 3. **Bundle IDs** leer lassen. Das Feld ist nur für iOS. OpenScr ist vorerst nur Android.
 4. Unter **Android Packages** gibt es keine eigene „SHA“-Überschrift. Zwei Felder stehen nebeneinander: links **Package name**, rechts **Package SHA1 fingerprint**, danach Add bzw. Save. So sieht die Zeile im Dashboard aus:
 
@@ -18,7 +18,7 @@ Am Computer geht das leichter als auf dem Handy: [Spotify Developer Dashboard](h
    Das Bild ist die Spotify-Oberfläche, nicht OpenScr. OpenScr ist kein offizielles Spotify-Produkt.
 
 5. Paketname und SHA-1 müssen zur **gerade laufenden** Variante passen. Im Dashboard die alte Zeile `com.everyapp.container` und die Redirect-URI `everyapp://spotify-callback` entfernen. Den Debug-Fingerabdruck nicht als Produktions-SHA-1 eintragen.
-   - Development / **SrvOpenScr** (`APP_VARIANT=development`, Paket `com.openscr.app.dev`): SHA-1 des Debug-Keystores der aktuellen SrvOpenScr-APK ist `5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25`. Im Dashboard-Feld steht die Form mit Doppelpunkten. Ohne Doppelpunkte ist derselbe Wert gültig.
+   - **OpenScr Dev** (`APP_VARIANT=dev` oder `development`, Paket `com.openscr.app.dev`, Redirect `openscrdev://spotify-callback`): eigener Dashboard-Eintrag. SHA-1 des Debug-Keystores ist `5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25`. Im Dashboard-Feld steht die Form mit Doppelpunkten. Ohne Doppelpunkte ist derselbe Wert gültig.
    - Production / **OpenScr** (`com.openscr.app`): drei Zeilen, jede mit dem Paket `com.openscr.app` und einem SHA-1. Alle drei einzutragen ist harmlos und deckt Play-Installationen und eine direkt installierte APK ab. Welchen der beiden Play-Schlüssel die installierte APK meldet, ist noch nicht geprüft.
      - Play-Signatur (Google Play, App-Signatur): `AD:B7:BB:56:B8:CE:4F:E1:08:19:19:B0:56:FF:B1:A6:07:8D:01:3F`
      - Play-Signatur, klassischer Schlüssel: `A2:77:96:AB:2B:9E:B9:45:A3:DB:CF:8A:A6:0B:20:FB:6B:A5:85:FE`

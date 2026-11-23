@@ -70,11 +70,11 @@ The host `add` is reserved (it is not an OpenScrapp name). The GitHub URL is the
 | App | Package | Link |
 | --- | --- | --- |
 | Production **OpenScr** | `com.openscr.app` | `openscr://add?url=<encoded https GitHub URL>` |
-| Dev client **SrvOpenScr** | `com.openscr.app.dev` | `exp+openscr://add?url=<encoded https GitHub URL>` (preferred; this scheme is what opens the dev client). `openscr://add?url=…` is also accepted if that build is the one that handles the scheme. |
+| **OpenScr Dev** (`APP_VARIANT=dev`) | `com.openscr.app.dev` | `openscrdev://add?url=<encoded https GitHub URL>`. A dev-client build also accepts `exp+openscr://add?url=…`. |
 
 Example for `https://github.com/Krust3nKaese3/GuessTheSongScrapp`:
 
-- Dev client (SrvOpenScr): `exp+openscr://add?url=https%3A%2F%2Fgithub.com%2FKrust3nKaese3%2FGuessTheSongScrapp`
+- OpenScr Dev: `openscrdev://add?url=https%3A%2F%2Fgithub.com%2FKrust3nKaese3%2FGuessTheSongScrapp`
 - Production OpenScr: `openscr://add?url=https%3A%2F%2Fgithub.com%2FKrust3nKaese3%2FGuessTheSongScrapp`
 
 Opening one of those links (app already running, or cold start) runs the same fetch and save as **Add**, including the success and error alerts. Existing OpenScrapp links such as `openscr://EveryMacro/...` are unchanged. `openscr://spotify-callback` and the dev-launcher URL `exp+openscr://expo-development-client/...` are not install links.
@@ -347,7 +347,7 @@ The Client ID is **not** baked into the build. Enter it in OpenScr under **Spoti
 
 Changing the Client ID does not require a new native build. The redirect URI, package names and Spotify SDK do.
 
-The same screen has a German walkthrough (**Anleitung**) next to the Client ID field. It covers creating the Dashboard app on a computer ([Spotify Developer Dashboard](https://developer.spotify.com/dashboard)) with **Web API** and **Android SDK** (not the Web Playback SDK), the redirect URI `openscr://spotify-callback`, empty Bundle IDs (iOS-only; OpenScr is Android-only for now), and the Android package name plus SHA-1 of the **running** variant. Remove any old `com.everyapp.container` row and the redirect URI `everyapp://spotify-callback`. Development / SrvOpenScr (`APP_VARIANT=development`, `com.openscr.app.dev`) uses the debug-keystore SHA-1 `5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25`. Production / OpenScr (`com.openscr.app`) needs three Android package rows, each with that same package name and one SHA-1: Play app signing `AD:B7:BB:56:B8:CE:4F:E1:08:19:19:B0:56:FF:B1:A6:07:8D:01:3F`, Play classic key `A2:77:96:AB:2B:9E:B9:45:A3:DB:CF:8A:A6:0B:20:FB:6B:A5:85:FE`, and the upload key `DA:30:B6:B4:FA:8D:D1:C1:EA:85:6B:3D:E3:4D:33:67:AE:F5:6C:B2` (EAS build installed directly, not from Play). Registering all three is harmless and covers both Play and sideloaded builds; which of the two Play keys the installed APK reports is not verified yet. Do not reuse the debug fingerprint for production. The phone still needs the Spotify app and a Premium login to start a specific track. The API and SDK themselves cost nothing extra. Same steps, in German, in [SPOTIFY.md](SPOTIFY.md).
+The same screen has a German walkthrough (**Anleitung**) next to the Client ID field. It covers creating the Dashboard app on a computer ([Spotify Developer Dashboard](https://developer.spotify.com/dashboard)) with **Web API** and **Android SDK** (not the Web Playback SDK), the redirect URI `openscr://spotify-callback`, empty Bundle IDs (iOS-only; OpenScr is Android-only for now), and the Android package name plus SHA-1 of the **running** variant. Remove any old `com.everyapp.container` row and the redirect URI `everyapp://spotify-callback`. OpenScr Dev (`APP_VARIANT=dev`, `com.openscr.app.dev`, redirect `openscrdev://spotify-callback`) uses the debug-keystore SHA-1 `5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25`. Production / OpenScr (`com.openscr.app`) needs three Android package rows, each with that same package name and one SHA-1: Play app signing `AD:B7:BB:56:B8:CE:4F:E1:08:19:19:B0:56:FF:B1:A6:07:8D:01:3F`, Play classic key `A2:77:96:AB:2B:9E:B9:45:A3:DB:CF:8A:A6:0B:20:FB:6B:A5:85:FE`, and the upload key `DA:30:B6:B4:FA:8D:D1:C1:EA:85:6B:3D:E3:4D:33:67:AE:F5:6C:B2` (EAS build installed directly, not from Play). Registering all three is harmless and covers both Play and sideloaded builds; which of the two Play keys the installed APK reports is not verified yet. Do not reuse the debug fingerprint for production. The phone still needs the Spotify app and a Premium login to start a specific track. The API and SDK themselves cost nothing extra. Same steps, in German, in [SPOTIFY.md](SPOTIFY.md).
 
 ```javascript
 const status = await OpenScrBridge.spotify.isAvailable();
@@ -552,16 +552,28 @@ The APK will be available for download from the Expo dashboard after the build c
 
 #### Option 2: Local Build
 
-```bash
-# Generate native Android project
-npx expo prebuild --platform android
+Production (name OpenScr, package `com.openscr.app`, scheme `openscr`):
 
-# Build with Gradle
+```bash
+npx expo prebuild --platform android
 cd android
 ./gradlew assembleRelease
+```
 
-# APK location:
-# android/app/build/outputs/apk/release/app-release.apk
+OpenScr Dev (name OpenScr Dev, package `com.openscr.app.dev`, scheme `openscrdev`):
+
+```bash
+APP_VARIANT=dev npx expo prebuild --platform android --clean
+cd android
+./gradlew assembleRelease
+```
+
+The APK is `android/app/build/outputs/apk/release/app-release.apk`.
+
+The same dev variant on EAS is the `development` profile (`APP_VARIANT=dev` in `eas.json`):
+
+```bash
+eas build --platform android --profile development
 ```
 
 ### Installing APK
