@@ -287,15 +287,19 @@ export const GUEST_SHIM_SOURCE = `(function () {
   function socketSend(text) {
     if (socket && socket.readyState === 1) socket.send(text);
   }
+  function rememberOut(text) {
+    outbox.push(text);
+    if (outbox.length > 32) outbox.shift();
+  }
   function flushOutbox() {
     if (!welcomed) return;
     while (outbox.length) socketSend(outbox.shift());
   }
   function sendRaw(frame) {
     var text = JSON.stringify(frame);
-    if (frame.t !== 'hello' && !welcomed) { outbox.push(text); return; }
+    if (frame.t !== 'hello' && !welcomed) { rememberOut(text); return; }
     if (socket && socket.readyState === 1) socketSend(text);
-    else if (frame.t !== 'hello') outbox.push(text);
+    else if (frame.t !== 'hello') rememberOut(text);
   }
   function helloFrame() {
     var saved = readIdentity();
@@ -463,7 +467,8 @@ export const GUEST_SHIM_SOURCE = `(function () {
     resume: function () {
       var saved = readIdentity();
       if (saved && saved.name && !name) name = saved.name;
-      if (welcomed && socket && socket.readyState === 1) return Promise.resolve(view('ready'));
+      if (!name) name = 'Gast';
+      if (welcomed && selfId && socket && socket.readyState === 1) return Promise.resolve(view('ready'));
       connect();
       return new Promise(function (resolve) { resumeWaiters.push(resolve); });
     },
@@ -478,7 +483,7 @@ export const GUEST_SHIM_SOURCE = `(function () {
     buildInfo: { environment: 'browser-guest', buildType: 'browser' },
     multiplayer: mp,
     events: { on: on, off: off },
-    storage: stub(),
+    storage: null,
     secrets: stub(),
     http: stub(),
     bluetooth: stub(),
@@ -491,7 +496,7 @@ export const GUEST_SHIM_SOURCE = `(function () {
     net: stub(),
     popup: stub(),
     tiles: stub(),
-    spotify: stub(),
+    spotify: null,
     clipboard: stub(),
     network: stub(),
     media: stub(),
@@ -505,15 +510,7 @@ export const GUEST_SHIM_SOURCE = `(function () {
   window.OpenScrBridge = bridge;
   window.EveryAppBridge = bridge;
   var savedNow = readIdentity();
-  if (savedNow && savedNow.secret && savedNow.playerId) {
-    name = savedNow.name || 'Gast';
-    connect();
-  } else {
-    setTimeout(function () {
-      if (name || welcomed) return;
-      if (document.body) showName();
-      else document.addEventListener('DOMContentLoaded', showName);
-    }, 300);
-  }
+  name = (savedNow && savedNow.name) || 'Gast';
+  connect();
 })();
 `;

@@ -19,6 +19,7 @@ const { permissionDecision } = require('../src/bridge/permissions.ts');
 const {
   hostMultiplayer,
   broadcastMultiplayer,
+  sendMultiplayer,
   resetMultiplayerForTests,
   configureMultiplayer,
   subscribeMpUi,
@@ -55,6 +56,9 @@ test('Gastseite setzt die Brücke und merkt sich die Identität', () => {
   assert.match(GUEST_SHIM_SOURCE, /showHotspotQr/);
   assert.match(GUEST_SHIM_SOURCE, /acquire:\s*function/);
   assert.match(GUEST_SHIM_SOURCE, /release:\s*function/);
+  assert.match(GUEST_SHIM_SOURCE, /spotify:\s*null/);
+  assert.match(GUEST_SHIM_SOURCE, /storage:\s*null/);
+  assert.match(GUEST_SHIM_SOURCE, /name = \(savedNow && savedNow\.name\) \|\| 'Gast';\s*connect\(\)/);
   const html = injectGuestDocument('<html><head></head><body>Spiel</body></html>', '0123456789abcdef', 'wolf', 'K7QP');
   assert.match(html, /openscr-guest\.js/);
   assert.match(html, /"appId":"wolf"/);
@@ -166,6 +170,7 @@ test('Browser-Gast bekommt nach Reload den letzten Spielstand, ein App-Gast nich
     assert.deepStrictEqual(saved.snapshot, { type: 'state', phase: 'night' });
 
     first.close();
+    await sendMultiplayer('wolf', { type: 'buzz', n: 1 }, { to: welcome.playerId });
     const again = fakeConn();
     acceptGuest(again);
     again.push(utf8Encode(
@@ -185,6 +190,7 @@ test('Browser-Gast bekommt nach Reload den letzten Spielstand, ein App-Gast nich
     const back = replay.find((frame) => frame.t === 'welcome');
     assert.strictEqual(back.playerId, welcome.playerId);
     assert.ok(replay.some((frame) => frame.t === 'msg' && frame.data.phase === 'night'));
+    assert.ok(replay.some((frame) => frame.t === 'msg' && frame.data.type === 'buzz' && frame.data.n === 1));
 
     const appGuest = makeAppLink();
     acceptApp(appGuest);
@@ -194,6 +200,17 @@ test('Browser-Gast bekommt nach Reload den letzten Spielstand, ein App-Gast nich
     const appFrames = appGuest.sent.flatMap((chunk) => chunk.split('\n').filter(Boolean).map((line) => JSON.parse(line)));
     assert.ok(appFrames.some((frame) => frame.t === 'welcome'));
     assert.ok(!appFrames.some((frame) => frame.t === 'msg'));
+    const appWelcome = appFrames.find((frame) => frame.t === 'welcome');
+    appGuest.close();
+    await broadcastMultiplayer('wolf', { type: 'state', phase: 'vote' });
+    const appAgain = makeAppLink();
+    acceptApp(appAgain);
+    appAgain.push(`${JSON.stringify({
+      t: 'hello', v: 1, appId: 'wolf', room: hosted.roomCode, token, name: 'Cio',
+      playerId: appWelcome.playerId, secret: appWelcome.secret,
+    })}\n`);
+    const appReplay = appAgain.sent.flatMap((chunk) => chunk.split('\n').filter(Boolean).map((line) => JSON.parse(line)));
+    assert.ok(appReplay.some((frame) => frame.t === 'msg' && frame.data.phase === 'vote'));
   } finally {
     await resetMultiplayerForTests();
   }

@@ -118,7 +118,7 @@ WLAN-Adressen (`wlan0`, `en0`) haben Vorrang. Ein Hotspot ohne WLAN-Client (typi
 - Solange der Host weg ist, bekommen Gäste `multiplayer.hostAway` („Host ist kurz weg“) und versuchen es mit wachsendem Abstand weiter. Zuerst die gespeicherte Adresse, danach die Suche nach der Raum-Id, weil sich die IP ändern kann.
 - `multiplayer.resume()` und das Event `multiplayer.resumed` liefern `{ role, roomCode, selfId, players, status }`. Den Spielstand muss die OpenScrapp selbst aus `OpenScrBridge.storage` holen. Der Host schickt ihn den Gästen danach.
 - Ein gespeicherter Raum ohne Aktivität verschwindet nach 24 Stunden.
-- Während der Unterbrechung werden Spielnachrichten nicht gepuffert.
+- Eine kurze Trennung puffert Spielnachrichten 20 Sekunden, höchstens 32 Stück, in beide Richtungen. Danach sind sie weg. Der Platz selbst bleibt länger.
 - Pro Gerät nur ein Raum. Wer als Gast gespeichert ist, kann keinen neuen Raum öffnen, bevor `leave()` den Platz freigibt.
 
 Spieler, die kurz weg sind, bleiben in `onPlayersChanged` mit `connected: false`.
@@ -134,7 +134,9 @@ Der Host-Bildschirm fragt zuerst **WLAN** oder **Hotspot**.
 
 Die Codes bleiben erreichbar, auch mitten im Spiel: OpenScr blendet einen kleinen Knopf **Einladen** ein. Der kommt von OpenScr, nicht von der OpenScrapp.
 
-Der Spiel-Code liefert die Dateien der geöffneten OpenScrapp und ein kleines Skript `openscr-guest.js`. Das Skript setzt `window.OpenScrBridge` und `window.EveryAppBridge`. `OpenScrBridge.guest` ist `true`. Die Mehrspieler-Methoden des Gasts sind dieselben wie in der App und laufen über WebSocket:
+Der Spiel-Code liefert die Dateien der geöffneten OpenScrapp und ein kleines Skript `openscr-guest.js`. Das Skript setzt `window.OpenScrBridge` und `window.EveryAppBridge`. `OpenScrBridge.guest` ist `true`. `spotify` und `storage` fehlen, damit die Seite den Browser erkennt. Die Mehrspieler-Methoden des Gasts sind dieselben wie in der App und laufen über WebSocket.
+
+Die Seite, die der Spiel-Code öffnet, ist schon der Raum. Das Shim verbindet sofort, der Anzeigename ist der gespeicherte Name oder `Gast`. `resume()` liefert `{ role: 'guest', roomCode, selfId, players, status: 'ready' }`, sobald das Willkommen da ist. Ist der Socket schon offen, kommt dieselbe Antwort sofort. `status` ist `hostAway` nur, solange der Socket nach einem Abbruch noch fehlt. Die OpenScrapp parst die Adresse nicht und öffnet keinen eigenen Socket.
 
 `join`, `send`, `broadcast`, `leave`, `resume`, `onMessage`, `onPlayersChanged`, `onJoinRequest`, `onResumed`, `onHostAway`, `showQr`, `showWifiQr`, `showGameQr`, `showHotspotQr`.
 
@@ -157,18 +159,16 @@ mp.onHostAway((info) => {});
 
 if (bridge.guest === true) {
   const back = await mp.resume();
-  if (!back || back.status === 'hostAway') {
-    // resume verbindet mit der gespeicherten Identität von selbst neu.
-    // Ohne gespeicherten Namen: join, oder das Namensfeld der Gastseite.
-  }
-  if (!back || !back.selfId) await mp.join({ name: 'Bea' });
+  // back.role === 'guest', back.status === 'ready', back.selfId ist der Platz.
 } else {
   const back = await mp.resume();
   if (!back) await mp.host({ name: 'Ada' });
 }
 ```
 
-Callbacks vor `resume`, `join` oder `host` anmelden. Der Host schickt den für Gäste sichtbaren Stand mit `broadcast`, sobald er sich ändert. OpenScr merkt sich diesen letzten `broadcast` und schickt ihn einem Browser-Gast nach dem Willkommen erneut, also nach einem Reload, nach einem Verbindungsabbruch und nach einem Neustart von OpenScr. Eine einzelne `send`-Nachricht an eine Person wird nicht wiederholt. Die OpenScrapp soll den Stand ersetzen, nicht anstückeln. `storage` gibt es im Browser nicht. Den Stand gibt es nur aus `onMessage`.
+Callbacks vor `resume`, `join` oder `host` anmelden. Der Host schickt den für Gäste sichtbaren Stand mit `broadcast`, sobald er sich ändert. OpenScr merkt sich diesen letzten `broadcast` und schickt ihn einem Browser-Gast nach dem Willkommen erneut, also nach einem Reload, nach einem Verbindungsabbruch und nach einem Neustart von OpenScr.
+
+In den 20 Sekunden nach einem Abbruch bleiben zusätzlich die Spielnachrichten liegen, die der Host in der Lücke per `send` oder `broadcast` geschickt hat, und die Nachrichten, die der Gast in der Lücke abgeschickt hat. Nach dem erneuten Willkommen gehen sie in der alten Reihenfolge raus, höchstens 32 Stück. Das gilt für den App-Gast und den Browser-Gast. Danach sind sie weg. Der letzte `broadcast` an den Browser bleibt die Ausnahme und kommt auch nach einem längeren Reload noch einmal. Die OpenScrapp soll den Stand ersetzen, nicht anstückeln. `storage` gibt es im Browser nicht. Den Stand gibt es nur aus `onMessage`.
 
 Die Identität liegt im `localStorage` des Browsers (`playerId`, Geheimnis, Name, Raumcode). Dieselbe Person belegt nach dem Neuladen denselben Platz. Ein App-Gast nutzt weiter sein gespeichertes Geheimnis in OpenScr. Daran ändert der Browser-Weg nichts.
 
@@ -176,10 +176,10 @@ Die Identität liegt im `localStorage` des Browsers (`playerId`, Geheimnis, Name
 
 ### Im Browser nicht da
 
-Diese Aufrufe antworten mit „Im Browser-Gast nicht verfügbar.“:
+`storage` und `spotify` sind nicht gesetzt. Die übrigen Aufrufe antworten mit „Im Browser-Gast nicht verfügbar.“:
 
-- Speicher und Geheimnisse (`storage`, `secrets`)
-- Spotify, Medientasten, Bluetooth, BLE
+- Geheimnisse (`secrets`)
+- Medientasten, Bluetooth, BLE
 - Kamera, Sensoren, Vibration, Benachrichtigungen
 - Hintergrund, Kacheln, Popups
 - Netzinfo, Roh-Sockets, HTTP über die Bridge, Kryptografie, Zwischenablage

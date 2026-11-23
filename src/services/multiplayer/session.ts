@@ -93,6 +93,10 @@ interface LiveSession {
   resumeAttempt: number;
   hostAway: boolean;
   roster: PlayerView[];
+  /** Nachrichten an einen Platz ohne Socket, nur für die kurze Wiederkehr. */
+  held: Map<string, { at: number; frame: string }[]>;
+  /** Vom App-Gast geschickt, solange der Socket fehlt. */
+  outbox: string[];
 }
 
 let live: LiveSession | null = null;
@@ -335,10 +339,39 @@ function publishPlayers(session: LiveSession): void {
 
 function deliver(session: LiveSession, result: RelayResult): void {
   const frame = encodeFrame({ t: 'msg', from: result.from, data: result.data, seq: result.seq });
+  const now = Date.now();
   for (const id of result.targets) {
-    if (id === session.selfId) session.emit('multiplayer.message', { from: result.from, data: result.data });
-    else session.links.get(id)?.send(frame);
+    if (id === session.selfId) {
+      session.emit('multiplayer.message', { from: result.from, data: result.data });
+      continue;
+    }
+    const link = session.links.get(id);
+    if (link) {
+      link.send(frame);
+      continue;
+    }
+    const seated = session.room?.players().some((player) => player.id === id);
+    if (!seated) continue;
+    const queued = (session.held.get(id) || []).filter((item) => now - item.at <= MP_LIMITS.gapHoldMs);
+    queued.push({ at: now, frame });
+    session.held.set(id, queued.slice(-MP_LIMITS.gapHoldMax));
   }
+}
+
+function flushHeld(session: LiveSession, playerId: string, link: MpLink): void {
+  const now = Date.now();
+  const queued = session.held.get(playerId) || [];
+  session.held.delete(playerId);
+  queued.forEach((item) => {
+    if (now - item.at <= MP_LIMITS.gapHoldMs) link.send(item.frame);
+  });
+}
+
+function flushOutbox(session: LiveSession): void {
+  const link = session.guestLink;
+  if (!link || !session.welcomed) return;
+  const queued = session.outbox.splice(0);
+  queued.forEach((frame) => link.send(frame));
 }
 
 function stopTimers(session: LiveSession): void {
@@ -469,6 +502,8 @@ function blankSession(partial: Partial<LiveSession> & Pick<LiveSession, 'appId' 
     welcomed: partial.welcomed ?? false,
     giveUp: false,
     secret: partial.secret ?? '',
+    held: new Map(),
+    outbox: [],
     sockets: partial.sockets ?? new Set(),
     handshakeTimers: partial.handshakeTimers ?? new Set(),
     pending: new Map(),
@@ -562,6 +597,7 @@ function admitLink(session: LiveSession, link: MpLink, playerId: string, secret:
   if (link.browser && session.snapshot != null) {
     link.send(encodeFrame({ t: 'msg', from: session.selfId, data: session.snapshot, seq: session.snapshotSeq || 0 }));
   }
+  flushHeld(session, playerId, link);
   publishPlayers(session);
   void remember(session);
   void announce(session);
@@ -717,6 +753,7 @@ function bindHostLink(session: LiveSession, link: MpLink): void {
     if (frame.t === 'leave') {
       session.room.leave(playerId);
       session.links.delete(playerId);
+      session.held.delete(playerId);
       link.close();
       publishPlayers(session);
       void remember(session);
@@ -928,6 +965,7 @@ async function openGuest(session: LiveSession, transport: MpTransport): Promise<
           session.roster = frame.players;
           session.emit('multiplayer.players', { players: frame.players, selfId: frame.playerId, roomCode: session.roomCode });
           void remember(session);
+          flushOutbox(session);
           resolve();
           return;
         }
@@ -1029,10 +1067,8 @@ export async function sendMultiplayer(appId: string, data: unknown, opts?: { to?
     deliver(session, result);
     return { seq: result.seq };
   }
-  if (!session.guestLink || !session.welcomed) throw new Error('Keine Verbindung zum Raum.');
   const frame: WireFrame = opts?.to ? { t: 'msg', to: opts.to, data: clean } : { t: 'msg', data: clean };
-  session.guestLink.send(encodeFrame(frame));
-  return { seq: 0 };
+  return queueGuestFrame(session, frame);
 }
 
 export async function broadcastMultiplayer(appId: string, data: unknown): Promise<{ seq: number }> {
@@ -1046,9 +1082,21 @@ export async function broadcastMultiplayer(appId: string, data: unknown): Promis
     void remember(session);
     return { seq: result.seq };
   }
-  if (!session.guestLink || !session.welcomed) throw new Error('Keine Verbindung zum Raum.');
-  session.guestLink.send(encodeFrame({ t: 'msg', all: true, data: clean }));
-  return { seq: 0 };
+  return queueGuestFrame(session, { t: 'msg', all: true, data: clean });
+}
+
+function queueGuestFrame(session: LiveSession, frame: WireFrame): { seq: number } {
+  const text = encodeFrame(frame);
+  if (session.guestLink && session.welcomed) {
+    session.guestLink.send(text);
+    return { seq: 0 };
+  }
+  if (session.role === 'guest' && !session.giveUp && !session.leaving) {
+    session.outbox.push(text);
+    if (session.outbox.length > MP_LIMITS.gapHoldMax) session.outbox.splice(0, session.outbox.length - MP_LIMITS.gapHoldMax);
+    return { seq: 0 };
+  }
+  throw new Error('Keine Verbindung zum Raum.');
 }
 
 export function showMultiplayerQr(
