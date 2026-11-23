@@ -91,9 +91,10 @@ test('Gastseite setzt die Brücke und merkt sich die Identität', () => {
   assert.match(GUEST_SHIM_SOURCE, /name = \(savedNow && savedNow\.name\) \|\| 'Gast';\s*connect\(\)/);
   const html = injectGuestDocument('<html><head></head><body>Spiel</body></html>', '0123456789abcdef', 'wolf', 'K7QP');
   assert.match(html, /<base href="\/g\/0123456789abcdef\/">/);
-  assert.match(html, /openscr-guest-error/);
-  assert.match(html, /Datei nicht geladen/);
-  assert.match(html, /Kopieren/);
+  assert.match(html, /openscr-guest-down/);
+  assert.match(html, /Spiel konnte nicht laden/);
+  assert.match(html, /\[openscr-guest\]/);
+  assert.doesNotMatch(html, /openscr-guest-error/);
   assert.match(html, /openscr-guest\.js/);
   assert.match(html, /"appId":"wolf"/);
   assert.match(html, /Spiel/);
@@ -175,7 +176,8 @@ test('Gastserver liefert Shim, Skripte und Unterordner mit dem passenden Typ', a
     const page = await httpGet(server.port, `/g/${token}/`);
     assert.match(page, /<base href="\/g\/fdc394d2f43ecd6d\/">/);
     assert.match(page, /src="players\.js"/);
-    assert.match(page, /Datei nicht geladen/);
+    assert.match(page, /Spiel konnte nicht laden/);
+    assert.doesNotMatch(page, /openscr-guest-error/);
     const paths = [
       ['openscr-guest.js', 'text/javascript', 'OpenScrBridge'],
       ['players.js', 'text/javascript', 'window.players=1'],
@@ -198,6 +200,17 @@ test('Gastserver liefert Shim, Skripte und Unterordner mit dem passenden Typ', a
     });
     const mp3 = await httpGetRaw(server.port, `/g/${token}/assets/sounds/correct.mp3`);
     assert.deepStrictEqual(Array.from(mp3.subarray(mp3.length - 6)), [255, 251, 144, 0, 1, 2]);
+    const ranged = await httpGetRaw(server.port, `/g/${token}/assets/sounds/correct.mp3`, 'Range: bytes=0-\r\n');
+    const rangedText = ranged.toString('latin1');
+    assert.match(rangedText, /^HTTP\/1\.1 206/);
+    assert.match(rangedText, /accept-ranges: bytes/);
+    assert.match(rangedText, /content-range: bytes 0-5\/6/);
+    assert.match(rangedText, /content-type: audio\/mpeg/);
+    assert.deepStrictEqual(Array.from(ranged.subarray(ranged.length - 6)), [255, 251, 144, 0, 1, 2]);
+    const clip = await httpGetRaw(server.port, `/g/${token}/assets/sounds/buzzer.mp3`, 'Range: bytes=1-2\r\n');
+    assert.match(clip.toString('latin1'), /206 Partial Content/);
+    assert.match(clip.toString('latin1'), /content-range: bytes 1-2\/4/);
+    assert.deepStrictEqual(Array.from(clip.subarray(clip.length - 2)), [251, 144]);
   } finally {
     server.close();
   }
@@ -399,10 +412,10 @@ function httpGet(port, path) {
   return httpGetRaw(port, path).then((buf) => buf.toString('utf8'));
 }
 
-function httpGetRaw(port, path) {
+function httpGetRaw(port, path, extra) {
   return new Promise((resolve, reject) => {
     const socket = net.connect(port, '127.0.0.1', () => {
-      socket.write(`GET ${path} HTTP/1.1\r\nHost: phone\r\nConnection: close\r\n\r\n`);
+      socket.write(`GET ${path} HTTP/1.1\r\nHost: phone\r\nConnection: close\r\n${extra || ''}\r\n`);
     });
     const chunks = [];
     socket.on('data', (chunk) => chunks.push(chunk));
