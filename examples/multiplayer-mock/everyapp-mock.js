@@ -485,6 +485,9 @@
         if (!hosted) throw new Error('Nur der Host zeigt den QR-Code.');
         return { roomCode: hosted.roomCode, qrPayload: hosted.qrPayload };
       },
+      async showWifiQr() { return this.showQr(); },
+      async showGameQr() { return this.showQr(); },
+      async showHotspotQr() { return this.showQr(); },
       async discover(options) {
         const onRooms = options && options.onRooms;
         if (typeof onRooms === 'function') roomListeners.add(onRooms);

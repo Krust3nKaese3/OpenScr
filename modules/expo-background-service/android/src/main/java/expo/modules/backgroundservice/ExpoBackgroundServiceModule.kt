@@ -1,5 +1,15 @@
 package expo.modules.backgroundservice
 
+import android.app.Activity
+import android.app.Application
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.os.Build
+import android.os.Bundle
+import android.os.PowerManager
+import android.view.WindowManager
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
@@ -99,6 +109,99 @@ class ExpoBackgroundServiceModule : Module() {
     Function("isServiceEnabled") {
       val context = appContext.reactContext ?: return@Function false
       EveryAppBackgroundService.isEnabled(context)
+    }
+
+    // Open scrapp over the lock screen. The screen is not turned on. Home and app
+    // switches clear the flag until the device is unlocked again.
+    Function("setShowOverLock") { enabled: Boolean ->
+      val activity = appContext.currentActivity ?: return@Function false
+      ensureOverLockWatch(activity)
+      hostClass = activity.javaClass.name
+      wantsOverLock = enabled
+      if (!enabled) leftWhileScreenOn = false
+      applyOverLock(activity, enabled && !leftWhileScreenOn)
+      true
+    }
+
+    Function("setOverLockNotice") { appId: String, title: String, action: String, enabled: Boolean ->
+      val context = appContext.reactContext ?: return@Function false
+      if (enabled) OverLockNotice.show(context, appId, title, action)
+      else OverLockNotice.clear(context, appId)
+      true
+    }
+  }
+
+  private var hostClass: String? = null
+  private var wantsOverLock = false
+  private var leftWhileScreenOn = false
+  private var watchInstalled = false
+
+  private val unlockReceiver = object : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+      if (intent.action != Intent.ACTION_USER_PRESENT || !wantsOverLock) return
+      leftWhileScreenOn = false
+      val activity = appContext.currentActivity ?: return
+      if (activity.javaClass.name == hostClass) applyOverLock(activity, true)
+    }
+  }
+
+  private val activityWatch = object : Application.ActivityLifecycleCallbacks {
+    override fun onActivityPaused(activity: Activity) {
+      if (!wantsOverLock || activity.javaClass.name != hostClass) return
+      val pm = activity.getSystemService(PowerManager::class.java) ?: return
+      // Screen-off keeps the flag so the power button reveals the scrapp.
+      // Home and switching apps happen while the screen is still on.
+      if (pm.isInteractive) {
+        leftWhileScreenOn = true
+        applyOverLock(activity, false)
+      }
+    }
+
+    override fun onActivityResumed(activity: Activity) {
+      if (!wantsOverLock || activity.javaClass.name != hostClass) return
+      if (leftWhileScreenOn && LockScreen.isLocked(activity)) {
+        applyOverLock(activity, false)
+        return
+      }
+      leftWhileScreenOn = false
+      applyOverLock(activity, true)
+    }
+
+    override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
+    override fun onActivityStarted(activity: Activity) {}
+    override fun onActivityStopped(activity: Activity) {}
+    override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
+    override fun onActivityDestroyed(activity: Activity) {}
+  }
+
+  private fun ensureOverLockWatch(activity: Activity) {
+    if (watchInstalled) return
+    activity.application.registerActivityLifecycleCallbacks(activityWatch)
+    val filter = IntentFilter(Intent.ACTION_USER_PRESENT)
+    if (Build.VERSION.SDK_INT >= 33) {
+      activity.application.registerReceiver(unlockReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+    } else {
+      activity.application.registerReceiver(unlockReceiver, filter)
+    }
+    watchInstalled = true
+  }
+
+  private fun applyOverLock(activity: Activity, show: Boolean) {
+    activity.runOnUiThread {
+      try {
+        if (Build.VERSION.SDK_INT >= 27) {
+          activity.setShowWhenLocked(show)
+          activity.setTurnScreenOn(false)
+        } else {
+          @Suppress("DEPRECATION")
+          if (show) activity.window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED)
+          else activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED)
+          @Suppress("DEPRECATION")
+          activity.window.clearFlags(WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON)
+        }
+      } catch (e: Throwable) {
+        NativeLog.add(activity, "FEHLER showWhenLocked: ${e.javaClass.simpleName}: ${e.message}")
+      }
     }
   }
 

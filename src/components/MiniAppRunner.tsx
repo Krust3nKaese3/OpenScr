@@ -1,5 +1,6 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { View, StyleSheet, StatusBar, BackHandler, ActivityIndicator, Text, ScrollView, TouchableOpacity, Platform, useWindowDimensions } from 'react-native';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import { View, StyleSheet, StatusBar, BackHandler, ActivityIndicator, Text, ScrollView, TouchableOpacity, Platform, useWindowDimensions, AppState } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import WebView, { WebViewMessageEvent } from 'react-native-webview';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -15,7 +16,11 @@ import { setupGlobalErrorHandler, removeGlobalErrorHandler } from '../utils/erro
 import { MultiplayerOverlay } from './MultiplayerOverlay';
 import { SourceCodeModal } from './SourceCodeModal';
 import { learningPaneHeights, permissionsOfferedOnPlatform, showsLearningChrome } from '../services/iosPolicy';
-import { cancelMpScan, detachMultiplayer, dismissMpUi, endRoom, submitMpScan, subscribeMpUi, approveJoin, denyJoin, resumeMultiplayer, type MpUiState } from '../services/multiplayer/session';
+import { cancelMpScan, detachMultiplayer, dismissMpUi, endRoom, submitMpScan, subscribeMpUi, subscribeHostPresence, approveJoin, denyJoin, resumeMultiplayer, showMultiplayerQr, type HostPresence, type MpUiState } from '../services/multiplayer/session';
+import { setGuestContent } from '../services/multiplayer/guestContent';
+import { applyShowOverLock, publishOverLockNotice, readShowOverLockMap, shouldShowOverLock, showOverLockEnabled, SHOW_OVER_LOCK_KEY } from '../services/showOverLock';
+import { spotifyReconnectQuiet } from '../services/spotifySettings';
+import { shouldResumeSpotifyRemote } from '../services/spotifyClientId';
 import {
   assetRuntimeSource,
   assetUri,
@@ -43,6 +48,7 @@ export const MiniAppRunner: React.FC<MiniAppRunnerProps> = ({ app, onClose }) =>
   const [runtimeConsent, setRuntimeConsent] = useState<Permission[] | null>(null);
   const [grantedPermissions, setGrantedPermissions] = useState<Permission[]>([]);
   const [mpUi, setMpUi] = useState<MpUiState | null>(null);
+  const [hostPresence, setHostPresence] = useState<HostPresence | null>(null);
   const grantedRef = useRef<Permission[]>([]);
   const deniedRef = useRef<Permission[]>([]);
   const consentChain = useRef<Promise<unknown>>(Promise.resolve());
@@ -52,6 +58,27 @@ export const MiniAppRunner: React.FC<MiniAppRunnerProps> = ({ app, onClose }) =>
   const [showSource, setShowSource] = useState(false);
   const learning = showsLearningChrome(Platform.OS);
   const panes = learningPaneHeights(useWindowDimensions().height);
+  const leaveScrapp = () => {
+    applyShowOverLock(false);
+    onClose();
+  };
+
+  useLayoutEffect(() => {
+    let live = true;
+    void (async () => {
+      const raw = await AsyncStorage.getItem(SHOW_OVER_LOCK_KEY);
+      if (!live) return;
+      const enabled = showOverLockEnabled(readShowOverLockMap(raw), app.id);
+      if (shouldShowOverLock(Platform.OS, enabled, true)) {
+        applyShowOverLock(true);
+        void publishOverLockNotice(app.id, app.manifest.name);
+      }
+    })();
+    return () => {
+      live = false;
+      applyShowOverLock(false);
+    };
+  }, [app.id]);
 
   const webLoadedRef = useRef(false);
   const deliverDeepLink = () => {
@@ -80,6 +107,7 @@ export const MiniAppRunner: React.FC<MiniAppRunnerProps> = ({ app, onClose }) =>
     ScreenOrientation.unlockAsync();
 
     const backSub = BackHandler.addEventListener('hardwareBackPress', () => {
+      applyShowOverLock(false);
       onClose();
       return true;
     });
@@ -96,8 +124,34 @@ export const MiniAppRunner: React.FC<MiniAppRunnerProps> = ({ app, onClose }) =>
   }, []);
 
   useEffect(() => subscribeMpUi(setMpUi), []);
+  useEffect(() => subscribeHostPresence(setHostPresence), []);
+  useEffect(() => {
+    if (Platform.OS !== 'android') return undefined;
+    let entry = 'index.html';
+    try { entry = normalizeEntrypoint(app.manifest.entrypoint); } catch { entry = 'index.html'; }
+    setGuestContent(app.id, {
+      entry,
+      read: async (rel) => {
+        const file = await readMiniAppAsset(app.localPath, rel || entry);
+        if (!file) return null;
+        const body = file.text != null ? new TextEncoder().encode(file.text) : decodeBase64(file.base64);
+        return { mime: file.mime, body };
+      },
+    });
+    return undefined;
+  }, [app.id, app.localPath, app.manifest.entrypoint]);
 
   const declaredPermissions = () => (app.manifest.permissions || []).filter(isPermission);
+
+  const resumeSpotify = () => {
+    if (!shouldResumeSpotifyRemote({
+      platform: Platform.OS,
+      granted: grantedRef.current.includes('spotify'),
+      remembered: true,
+      stopped: false,
+    })) return;
+    void spotifyReconnectQuiet();
+  };
 
   const initApp = async () => {
     const existingPermissions = await StorageService.getAppPermissions(app.id);
@@ -111,6 +165,7 @@ export const MiniAppRunner: React.FC<MiniAppRunnerProps> = ({ app, onClose }) =>
       setShowPermissionModal(true);
     } else {
       await loadApp(existingPermissions);
+      resumeSpotify();
     }
   };
 
@@ -125,7 +180,16 @@ export const MiniAppRunner: React.FC<MiniAppRunnerProps> = ({ app, onClose }) =>
     setGrantedPermissions(next);
     setShowPermissionModal(false);
     await loadApp(next);
+    resumeSpotify();
   };
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') resumeSpotify();
+    });
+    return () => sub.remove();
+  }, [app.id]);
 
   const handleDenyPermissions = async () => {
     for (const permission of installPermissions) {
@@ -350,7 +414,7 @@ export const MiniAppRunner: React.FC<MiniAppRunnerProps> = ({ app, onClose }) =>
           <TouchableOpacity style={styles.errorButton} onPress={handleCopyError}>
             <Text style={styles.errorButtonText}>Copy Error</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.errorButton, styles.closeButton]} onPress={onClose}>
+          <TouchableOpacity style={[styles.errorButton, styles.closeButton]} onPress={leaveScrapp}>
             <Text style={styles.errorButtonText}>Close</Text>
           </TouchableOpacity>
         </View>
@@ -366,7 +430,7 @@ export const MiniAppRunner: React.FC<MiniAppRunnerProps> = ({ app, onClose }) =>
         <View style={[styles.devBar, { height: panes.bar }]}>
           <Text style={styles.devBarTitle}>Entwicklungsumgebung · eigener Code</Text>
           <View style={styles.devBarActions}>
-            <TouchableOpacity style={styles.devBarButton} onPress={onClose} accessibilityLabel="Zurück">
+            <TouchableOpacity style={styles.devBarButton} onPress={leaveScrapp} accessibilityLabel="Zurück">
               <Text style={styles.devBarButtonText}>Zurück</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.devBarButton} onPress={() => setShowSource(true)} accessibilityLabel="Quelltext">
@@ -419,13 +483,21 @@ export const MiniAppRunner: React.FC<MiniAppRunnerProps> = ({ app, onClose }) =>
 
       {learning ? null : (
       <TouchableOpacity
-        onPress={onClose}
+        onPress={leaveScrapp}
         style={{ position: 'absolute', top: 8, right: 8, width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       >
         <Text style={{ color: 'white', fontSize: 18, fontWeight: '700' }}>✕</Text>
       </TouchableOpacity>
       )}
+      {Platform.OS === 'android' && hostPresence && !mpUi ? (
+        <TouchableOpacity
+          onPress={() => { try { showMultiplayerQr(app.id); } catch { /* Der Raum ist schon zu. */ } }}
+          style={{ position: 'absolute', left: 12, bottom: 16, borderRadius: 16, backgroundColor: 'rgba(15,17,21,0.82)', paddingVertical: 8, paddingHorizontal: 12, zIndex: 12 }}
+        >
+          <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>{hostPresence.batteryWarning ? 'Einladen · Akku' : 'Einladen'}</Text>
+        </TouchableOpacity>
+      ) : null}
       </View>
 
       <PermissionRequestModal
@@ -448,7 +520,7 @@ export const MiniAppRunner: React.FC<MiniAppRunnerProps> = ({ app, onClose }) =>
       />
       {learning ? (
         <SourceCodeModal app={app} visible={showSource} onClose={() => setShowSource(false)} />
-      ) : (
+      ) : Platform.OS !== 'android' ? null : (
       <MultiplayerOverlay
         state={mpUi}
         onDone={dismissMpUi}
@@ -462,6 +534,11 @@ export const MiniAppRunner: React.FC<MiniAppRunnerProps> = ({ app, onClose }) =>
     </View>
   );
 };
+
+function decodeBase64(value: string): Uint8Array {
+  const buf = Buffer.from(value, 'base64');
+  return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
+}
 
 async function readMiniAppAsset(localPath: string, rel: string): Promise<{ mime: string; base64: string; text: string | null } | null> {
   const uri = assetUri(localPath, rel);

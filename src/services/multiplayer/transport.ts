@@ -6,6 +6,8 @@ import { chooseLanIPv4, isPrivateIPv4, type LanCandidate } from './qr';
 
 export interface MpLink {
   remoteAddress?: string;
+  /** Browser-Gast über den lokalen WebSocket. Bekommt den letzten Spielstand erneut. */
+  browser?: boolean;
   send(frame: string): void;
   close(): void;
   onData(cb: (chunk: string) => void): void;

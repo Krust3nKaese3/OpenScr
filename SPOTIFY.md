@@ -74,6 +74,18 @@ Events: `spotify.connected`, `spotify.disconnected`, `spotify.player`, `spotify.
 
 `stop()` ist Pause plus Sprung an den Anfang. Das App-Remote-SDK hat keinen eigenen Stop-Befehl.
 
+### Sperrbildschirm
+
+Hat App Remote einmal verbunden, merkt sich OpenScr das auf dem Gerät. Die Steuerung verbindet sich danach wieder ohne Spotify-Fenster:
+
+- wenn die OpenScrapp in den Vordergrund kommt, auch nach dem Einschalten des Bildschirms
+- wenn die Verbindung abbricht, solange niemand `disconnect` oder `logout` gerufen hat
+- wenn die OpenScrapp über die Sperrbildschirm-Benachrichtigung neu gestartet wird
+
+Dafür muss das Handy nicht entsperrt werden. Wiedergabe, Pause und der nächste Titel laufen über die Spotify-App im Hintergrund.
+
+Die erste Freigabe braucht ein entsperrtes Handy. Spotify zeigt dafür eine eigene Oberfläche, und `spotify.login()` ebenfalls. Über der Sperre öffnet OpenScr diese Oberfläche nicht. Die Meldung lautet: „Die erste Spotify-Freigabe braucht ein entsperrtes Handy. Danach verbindet sich die Steuerung auch über dem Sperrbildschirm wieder, ohne die PIN.“ Ein schon gespeichertes Web-API-Token funktioniert weiter. Die erste Anmeldung nicht.
+
 Weitere Beispiele stehen in der README unter „Spotify API“.
 
 ## Bibliotheken

@@ -58,7 +58,7 @@ Berechtigung `multiplayer`. Ein Handy ist Host im selben WLAN oder Hotspot. Die 
 
 Die OpenScrapp speichert den Spielstand selbst mit `OpenScrBridge.storage`. OpenScr speichert nur den Raum. Token und Spielergeheimnis bekommt die OpenScrapp nicht.
 
-Methoden: `host`, `join`, `send`, `broadcast`, `onMessage`, `onPlayersChanged`, `leave`, `showQr`, `discover`, `stopDiscovery`, `setDiscoverable`, `approveJoin`, `denyJoin`, `onJoinRequest`, `endRoom`, `resume`, `onResumed`, `onHostAway`.
+Methoden: `host`, `join`, `send`, `broadcast`, `onMessage`, `onPlayersChanged`, `leave`, `showQr`, `showWifiQr`, `showGameQr`, `showHotspotQr`, `discover`, `stopDiscovery`, `setDiscoverable`, `approveJoin`, `denyJoin`, `onJoinRequest`, `endRoom`, `resume`, `onResumed`, `onHostAway`.
 
 ```javascript
 const mp = window.OpenScrBridge.multiplayer;
@@ -82,6 +82,9 @@ mp.onHostAway((info) => {
 
 const room = await mp.host({ maxPlayers: 8, name: 'Ada', discoverable: true, joinApproval: true });
 await mp.showQr();
+await mp.showWifiQr();
+await mp.showGameQr();
+await mp.showHotspotQr();
 await mp.setDiscoverable(true);
 await mp.discover({ onRooms: (rooms) => {} });
 await mp.stopDiscovery();
@@ -111,6 +114,8 @@ await mp.endRoom();
 - JSON senden: Objekte, Listen, Zahlen, Zeichenketten, `true`, `false`, `null`.
 - Anzeigen nur über `textContent` oder `createTextNode`.
 - Den Raum mit `endRoom()` beenden, wenn das Spiel vorbei ist. `leave()` des Hosts beendet ihn nicht.
+- Für Gäste im Browser: `window.OpenScrBridge.guest === true` prüfen, dort nicht `host()` rufen, den vollen Stand per `broadcast` schicken und nicht aus `storage` lesen. Details in [MULTIPLAYER.md](MULTIPLAYER.md) unter „Browser-Gäste“.
+- Den Bildschirm mit `await OpenScrBridge.keepAwake.acquire()` wachhalten und mit `release()` freigeben. Keine Berechtigung, kein stummes Video. `OpenScrBridge.screen.keepAwake(true)` und `keepAwake(false)` tun dasselbe.
 
 ### Lassen
 

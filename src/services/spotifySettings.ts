@@ -130,6 +130,20 @@ export async function spotifyConnect() {
   return native.connect();
 }
 
+/** Restores App Remote without Spotify's auth screen. No-op until a connection once succeeded. */
+export async function spotifyReconnectQuiet(): Promise<boolean> {
+  if (!spotifyNativeAvailable()) return false;
+  try {
+    const native = await prepared();
+    if (typeof native.reconnectIfRemembered !== 'function') return false;
+    await native.reconnectIfRemembered();
+    return true;
+  } catch (e: any) {
+    console.log('[EveryApp] spotify stille Wiederverbindung', e?.message || e);
+    return false;
+  }
+}
+
 export async function spotifyDisconnect() {
   console.log('[EveryApp] spotify disconnect');
   if (!spotifyNativeAvailable()) return true;

@@ -47,6 +47,11 @@ test('add links on both schemes are reserved', () => {
   assert.strictEqual(D.repoUrlFromQr('openscr://EveryMacro/import').ok, false);
   assert.strictEqual(D.repoUrlFromQr('openscr://add?url=' + encodeURIComponent('https://example.com/x')).ok, false);
   assert.strictEqual(D.classifyDeepLink('openscr://add').repoUrl, '');
+  const lock = D.classifyDeepLink('openscr://lock?id=' + encodeURIComponent('app/1'));
+  assert.strictEqual(lock.type, 'lock');
+  assert.strictEqual(lock.appId, 'app/1');
+  assert.strictEqual(D.classifyDeepLink('openscr://lock').type, 'ignore');
+  assert.ok(!D.matchesMiniApp(D.parseDeepLink('openscr://lock?id=abc'), { id: 'lock', manifest: { name: 'Lock' } }));
   assert.strictEqual(D.parseDeepLink('everyapp://add?url=' + q), null);
 });
 test('queue', () => { D.queueDeepLink('a', { miniapp: 'x', path: '', params: {}, url: '' }); assert.ok(D.takeDeepLink('a')); assert.strictEqual(D.takeDeepLink('a'), null); });

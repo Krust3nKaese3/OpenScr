@@ -33,6 +33,9 @@ export const MP_LIMITS = {
   maxPendingAsks: 4,
   roomTtlMs: 24 * 60 * 60 * 1000,
   resumeBackoffMs: 15_000,
+  /** Nachrichten an einen kurz getrennten Platz bleiben so lange liegen. */
+  gapHoldMs: 20_000,
+  gapHoldMax: 32,
 };
 
 export interface PlayerView {

@@ -228,7 +228,7 @@ export class GameRoom {
     const clean = assertPayload(data);
     let targets: Member[];
     if (to) {
-      const dest = this.members.find((member) => member.id === to && member.connected);
+      const dest = this.members.find((member) => member.id === to && this.reachable(member, now));
       if (!dest) throw new Error('Empfänger ist nicht verbunden.');
       if (dest.id === from.id) throw new Error('Eine Nachricht an sich selbst geht nicht.');
       targets = [dest];
@@ -247,7 +247,7 @@ export class GameRoom {
     if (!from) throw new Error('Du bist nicht in diesem Raum.');
     if (!this.takeMessage(from, now)) throw new Error('Zu viele Nachrichten.');
     const clean = assertPayload(data);
-    const targets = this.members.filter((member) => member.connected && member.id !== from.id);
+    const targets = this.members.filter((member) => member.id !== from.id && this.reachable(member, now));
     this.seq += 1;
     return { seq: this.seq, from: from.id, data: clean, targets: targets.map((member) => member.id) };
   }
@@ -258,6 +258,13 @@ export class GameRoom {
       if (!this.members.some((member) => member.id === id)) return id;
     }
     return hex(this.random, 8);
+  }
+
+  /** Verbunden, oder höchstens kurz getrennt. Der Platz selbst bleibt länger. */
+  private reachable(member: Member, now: number): boolean {
+    if (member.connected) return true;
+    if (member.host || member.disconnectedAt == null) return false;
+    return now - member.disconnectedAt <= MP_LIMITS.gapHoldMs;
   }
 
   private takeMessage(member: Member, now: number): boolean {

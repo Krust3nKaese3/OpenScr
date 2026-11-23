@@ -10,6 +10,11 @@ import { AskGuard, resumeDelay } from './approval';
 import { encodeServiceTxt, matchRoom, visibleRooms, type DiscoveryPort, type LanService } from './discovery';
 import { createMemoryRoomStore, loadUsable, publicResume, type PublicResume, type RoomStore, type StoredRoom } from './persist';
 import { setHostKeepAlive } from './hostKeepAlive';
+import { clearGuestContent, guestContent } from './guestContent';
+import { openGuestServer, tcpByteListen, type ByteListen, type GuestServer } from './guestServer';
+import { clearInviteDraft } from './invite';
+import { readHostBattery, stopHotspot } from './lanShare';
+import { HOST_AWAKE_TAG, setKeepAwake } from '../keepAwake';
 
 export interface MpUiState {
   mode: 'host' | 'scan' | 'ask';
@@ -17,11 +22,22 @@ export interface MpUiState {
   roomCode?: string;
   requestId?: string;
   askName?: string;
+  gameUrl?: string;
+  batteryWarning?: string;
+  connectedGuests?: number;
+  qrFocus?: 'all' | 'wifi' | 'game' | 'hotspot';
+}
+
+export interface HostPresence {
+  roomCode: string;
+  gameUrl: string;
+  batteryWarning: string;
 }
 
 export interface HostResult {
   roomCode: string;
   qrPayload: string;
+  gameUrl: string;
   playerId: string;
   players: PlayerView[];
 }
@@ -56,6 +72,14 @@ interface LiveSession {
   links: Map<string, MpLink>;
   guestLink: MpLink | null;
   server: MpServer | null;
+  guestServer: GuestServer | null;
+  guestPort: number;
+  gameUrl: string;
+  lanIp: string;
+  snapshot: unknown | null;
+  snapshotSeq: number;
+  batteryWarning: string;
+  batteryTicks: number;
   timer: ReturnType<typeof setInterval> | null;
   reconnectTimer: ReturnType<typeof setTimeout> | null;
   leaving: boolean;
@@ -70,6 +94,10 @@ interface LiveSession {
   resumeAttempt: number;
   hostAway: boolean;
   roster: PlayerView[];
+  /** Nachrichten an einen Platz ohne Socket, nur für die kurze Wiederkehr. */
+  held: Map<string, { at: number; frame: string }[]>;
+  /** Vom App-Gast geschickt, solange der Socket fehlt. */
+  outbox: string[];
 }
 
 let live: LiveSession | null = null;
@@ -82,6 +110,12 @@ const memoryStore = createMemoryRoomStore();
 let storeOverride: RoomStore | null = null;
 let discoveryOverride: DiscoveryPort | null = null;
 let keepAliveOverride: ((on: boolean) => Promise<void>) | null = null;
+let guestListenOverride: ByteListen | null = null;
+let guestPlatformOverride: boolean | null = null;
+let batteryOverride: (() => Promise<{ level: number; charging: boolean }>) | null = null;
+let awakeOverride: ((on: boolean) => Promise<void>) | null = null;
+let presence: HostPresence | null = null;
+const presenceListeners = new Set<(state: HostPresence | null) => void>();
 let joinOwnedByApp = false;
 let seenServices: LanService[] = [];
 let userBrowsing = false;
@@ -110,10 +144,22 @@ async function keepAlive(on: boolean): Promise<void> {
   }
 }
 
-export function configureMultiplayer(partial: { store?: RoomStore; discovery?: DiscoveryPort; keepAlive?: (on: boolean) => Promise<void> }): void {
+export function configureMultiplayer(partial: {
+  store?: RoomStore;
+  discovery?: DiscoveryPort;
+  keepAlive?: (on: boolean) => Promise<void>;
+  guestListen?: ByteListen;
+  guestPlatform?: boolean;
+  readBattery?: () => Promise<{ level: number; charging: boolean }>;
+  keepAwake?: (on: boolean) => Promise<void>;
+}): void {
   if (partial.store) storeOverride = partial.store;
   if (partial.discovery) discoveryOverride = partial.discovery;
   if (partial.keepAlive) keepAliveOverride = partial.keepAlive;
+  if (partial.guestListen) guestListenOverride = partial.guestListen;
+  if (partial.guestPlatform != null) guestPlatformOverride = partial.guestPlatform;
+  if (partial.readBattery) batteryOverride = partial.readBattery;
+  if (partial.keepAwake) awakeOverride = partial.keepAwake;
 }
 
 export function setJoinRequestOwnedByApp(owned: boolean): void {
@@ -129,6 +175,13 @@ export async function resetMultiplayerForTests(): Promise<void> {
   storeOverride = null;
   discoveryOverride = null;
   keepAliveOverride = null;
+  guestListenOverride = null;
+  guestPlatformOverride = null;
+  batteryOverride = null;
+  awakeOverride = null;
+  clearGuestContent();
+  clearInviteDraft();
+  publishPresence(null);
   joinOwnedByApp = false;
   seenServices = [];
   userBrowsing = false;
@@ -147,6 +200,17 @@ export function subscribeMpUi(listener: UiListener): () => void {
   return () => uiListeners.delete(listener);
 }
 
+export function subscribeHostPresence(listener: (state: HostPresence | null) => void): () => void {
+  presenceListeners.add(listener);
+  listener(presence);
+  return () => presenceListeners.delete(listener);
+}
+
+function publishPresence(next: HostPresence | null): void {
+  presence = next;
+  presenceListeners.forEach((listener) => listener(presence));
+}
+
 export function dismissMpUi(): void {
   if (ui?.mode === 'host') setUi(null);
 }
@@ -160,7 +224,7 @@ export function submitMpScan(text: string): void {
 export function cancelMpScan(): void {
   const pending = scanDeferred;
   scanDeferred = null;
-  if (live?.role === 'host') setUi({ mode: 'host', qrPayload: live.qrPayload, roomCode: live.roomCode });
+  if (live?.role === 'host') showHost(live);
   else setUi(null);
   pending?.reject(new Error('Scan abgebrochen.'));
 }
@@ -169,9 +233,102 @@ function snapshot(session: LiveSession): HostResult {
   return {
     roomCode: session.roomCode,
     qrPayload: session.qrPayload,
+    gameUrl: session.gameUrl,
     playerId: session.selfId,
-    players: session.room ? session.room.players() : [],
+    players: session.room ? session.room.players() : session.roster,
   };
+}
+
+function hostUi(session: LiveSession): MpUiState {
+  const players = session.room ? session.room.players() : session.roster;
+  return {
+    mode: 'host',
+    qrPayload: session.qrPayload,
+    roomCode: session.roomCode,
+    gameUrl: session.gameUrl,
+    batteryWarning: session.batteryWarning,
+    connectedGuests: players.filter((player) => player.connected && !player.host).length,
+  };
+}
+
+function showHost(session: LiveSession, qrFocus?: MpUiState['qrFocus']): void {
+  publishPresence({
+    roomCode: session.roomCode,
+    gameUrl: session.gameUrl,
+    batteryWarning: session.batteryWarning,
+  });
+  const kept = qrFocus ?? (ui?.mode === 'host' ? ui.qrFocus : undefined);
+  setUi({ ...hostUi(session), qrFocus: kept });
+}
+
+async function hostAwake(on: boolean): Promise<void> {
+  const fn = awakeOverride || ((active: boolean) => setKeepAwake(HOST_AWAKE_TAG, active));
+  try {
+    await fn(on);
+  } catch {
+    /* Ohne expo-keep-awake bleibt der Raum. Der Vordergrunddienst hält den Prozess. */
+  }
+}
+
+function browserGuestAllowed(): boolean {
+  if (guestPlatformOverride === false) return false;
+  if (guestPlatformOverride === true) return true;
+  try {
+    return require('react-native').Platform.OS === 'android';
+  } catch {
+    return false;
+  }
+}
+
+async function watchBattery(session: LiveSession): Promise<void> {
+  const read = batteryOverride || readHostBattery;
+  let warning = '';
+  try {
+    const info = await read();
+    if (info.level >= 0 && info.level <= 20 && !info.charging) {
+      warning = `Akku niedrig (${info.level} %). Der Raum endet, wenn das Handy ausgeht.`;
+    }
+  } catch {
+    warning = '';
+  }
+  if (session.batteryWarning === warning) return;
+  session.batteryWarning = warning;
+  if (live === session && session.role === 'host') {
+    publishPresence({ roomCode: session.roomCode, gameUrl: session.gameUrl, batteryWarning: warning });
+    if (ui?.mode === 'host') setUi({ ...hostUi(session), qrFocus: ui.qrFocus });
+  }
+}
+
+async function startBrowserGuest(session: LiveSession): Promise<void> {
+  if (session.role !== 'host' || !browserGuestAllowed()) return;
+  const content = guestContent(session.appId);
+  const listen = guestListenOverride || tcpByteListen;
+  try {
+    const handle = await openGuestServer({
+      token: session.token,
+      appId: session.appId,
+      room: session.roomCode,
+      preferredPort: session.guestPort,
+      listen,
+      read: async (rel) => {
+        if (!content) return null;
+        return content.read(rel || content.entry);
+      },
+      onLink: (link) => {
+        if (!live || live !== session || session.leaving) {
+          link.close();
+          return;
+        }
+        bindHostLink(session, link);
+      },
+    });
+    session.guestServer = handle;
+    session.guestPort = handle.port;
+    session.gameUrl = session.lanIp && isPrivateIPv4(session.lanIp) ? handle.url(session.lanIp) : '';
+  } catch {
+    session.guestServer = null;
+    session.gameUrl = '';
+  }
 }
 
 function publishPlayers(session: LiveSession): void {
@@ -185,10 +342,39 @@ function publishPlayers(session: LiveSession): void {
 
 function deliver(session: LiveSession, result: RelayResult): void {
   const frame = encodeFrame({ t: 'msg', from: result.from, data: result.data, seq: result.seq });
+  const now = Date.now();
   for (const id of result.targets) {
-    if (id === session.selfId) session.emit('multiplayer.message', { from: result.from, data: result.data });
-    else session.links.get(id)?.send(frame);
+    if (id === session.selfId) {
+      session.emit('multiplayer.message', { from: result.from, data: result.data });
+      continue;
+    }
+    const link = session.links.get(id);
+    if (link) {
+      link.send(frame);
+      continue;
+    }
+    const seated = session.room?.players().some((player) => player.id === id);
+    if (!seated) continue;
+    const queued = (session.held.get(id) || []).filter((item) => now - item.at <= MP_LIMITS.gapHoldMs);
+    queued.push({ at: now, frame });
+    session.held.set(id, queued.slice(-MP_LIMITS.gapHoldMax));
   }
+}
+
+function flushHeld(session: LiveSession, playerId: string, link: MpLink): void {
+  const now = Date.now();
+  const queued = session.held.get(playerId) || [];
+  session.held.delete(playerId);
+  queued.forEach((item) => {
+    if (now - item.at <= MP_LIMITS.gapHoldMs) link.send(item.frame);
+  });
+}
+
+function flushOutbox(session: LiveSession): void {
+  const link = session.guestLink;
+  if (!link || !session.welcomed) return;
+  const queued = session.outbox.splice(0);
+  queued.forEach((frame) => link.send(frame));
 }
 
 function stopTimers(session: LiveSession): void {
@@ -217,6 +403,8 @@ async function shutdown(session: LiveSession | null, forget: boolean): Promise<v
   session.handshakeTimers.clear();
   session.guestLink?.close();
   session.server?.close();
+  session.guestServer?.close();
+  session.guestServer = null;
   try {
     await activeDiscovery().unpublish();
     await activeDiscovery().stopBrowse();
@@ -225,8 +413,16 @@ async function shutdown(session: LiveSession | null, forget: boolean): Promise<v
   }
   userBrowsing = false;
   if (forget) await activeStore().delete(session.appId);
-  if (session.role === 'host') await keepAlive(false);
-  if (live === session) live = null;
+  if (session.role === 'host') {
+    await keepAlive(false);
+    await hostAwake(false);
+    stopHotspot();
+    clearInviteDraft();
+  }
+  if (live === session) {
+    live = null;
+    publishPresence(null);
+  }
   setUi(null);
 }
 
@@ -293,6 +489,14 @@ function blankSession(partial: Partial<LiveSession> & Pick<LiveSession, 'appId' 
     links: partial.links ?? new Map(),
     guestLink: partial.guestLink ?? null,
     server: partial.server ?? null,
+    guestServer: partial.guestServer ?? null,
+    guestPort: partial.guestPort ?? 0,
+    gameUrl: partial.gameUrl ?? '',
+    lanIp: partial.lanIp ?? '',
+    snapshot: partial.snapshot ?? null,
+    snapshotSeq: partial.snapshotSeq ?? 0,
+    batteryWarning: partial.batteryWarning ?? '',
+    batteryTicks: 0,
     timer: null,
     reconnectTimer: null,
     leaving: false,
@@ -301,6 +505,8 @@ function blankSession(partial: Partial<LiveSession> & Pick<LiveSession, 'appId' 
     welcomed: partial.welcomed ?? false,
     giveUp: false,
     secret: partial.secret ?? '',
+    held: new Map(),
+    outbox: [],
     sockets: partial.sockets ?? new Set(),
     handshakeTimers: partial.handshakeTimers ?? new Set(),
     pending: new Map(),
@@ -329,6 +535,9 @@ async function remember(session: LiveSession): Promise<void> {
     port: session.target?.port || session.server?.port || 0,
     members,
     roster: session.roster,
+    snapshot: session.snapshot ?? undefined,
+    snapshotSeq: session.snapshotSeq || undefined,
+    guestPort: session.guestPort || undefined,
     updatedAt: Date.now(),
   };
   await activeStore().write(row);
@@ -388,6 +597,10 @@ function admitLink(session: LiveSession, link: MpLink, playerId: string, secret:
     roomId: session.roomId,
     players: session.room.players(),
   }));
+  if (link.browser && session.snapshot != null) {
+    link.send(encodeFrame({ t: 'msg', from: session.selfId, data: session.snapshot, seq: session.snapshotSeq || 0 }));
+  }
+  flushHeld(session, playerId, link);
   publishPlayers(session);
   void remember(session);
   void announce(session);
@@ -543,6 +756,7 @@ function bindHostLink(session: LiveSession, link: MpLink): void {
     if (frame.t === 'leave') {
       session.room.leave(playerId);
       session.links.delete(playerId);
+      session.held.delete(playerId);
       link.close();
       publishPlayers(session);
       void remember(session);
@@ -589,6 +803,8 @@ function startHeartbeat(session: LiveSession): void {
       if (tick.changed) publishPlayers(session);
       const ping = encodeFrame({ t: 'ping', ts: now });
       session.links.forEach((link) => link.send(ping));
+      session.batteryTicks += 1;
+      if (session.batteryTicks === 1 || session.batteryTicks % 20 === 0) void watchBattery(session);
       return;
     }
     if (session.guestLink) session.guestLink.send(encodeFrame({ t: 'ping', ts: now }));
@@ -604,7 +820,7 @@ export async function hostMultiplayer(
 ): Promise<HostResult> {
   if (live?.appId === appId && live.role === 'host') {
     live.emit = emit;
-    setUi({ mode: 'host', qrPayload: live.qrPayload, roomCode: live.roomCode });
+    showHost(live);
     return snapshot(live);
   }
   if (live) throw new Error('Auf diesem Gerät läuft schon ein anderer Raum.');
@@ -664,6 +880,10 @@ export async function hostMultiplayer(
       server,
       welcomed: true,
       secret: hostMember?.secret || '',
+      lanIp: ip,
+      guestPort: restored ? saved.guestPort || 0 : 0,
+      snapshot: restored ? saved.snapshot ?? null : null,
+      snapshotSeq: restored ? saved.snapshotSeq || 0 : 0,
     });
   } catch (error) {
     server?.close();
@@ -671,10 +891,13 @@ export async function hostMultiplayer(
   }
   if (!live) throw new Error('Der Raum ist nicht gestartet.');
   startHeartbeat(live);
+  await startBrowserGuest(live);
   await remember(live);
   await announce(live);
   await keepAlive(true);
-  setUi({ mode: 'host', qrPayload: live.qrPayload, roomCode: live.roomCode });
+  await hostAwake(true);
+  showHost(live);
+  void watchBattery(live);
   emit('multiplayer.players', { players: room.players(), selfId: room.hostId, roomCode: room.roomCode });
   if (restored) {
     const row = await activeStore().read(appId);
@@ -745,6 +968,7 @@ async function openGuest(session: LiveSession, transport: MpTransport): Promise<
           session.roster = frame.players;
           session.emit('multiplayer.players', { players: frame.players, selfId: frame.playerId, roomCode: session.roomCode });
           void remember(session);
+          flushOutbox(session);
           resolve();
           return;
         }
@@ -793,7 +1017,7 @@ export async function joinMultiplayer(
   transport: MpTransport = tcpTransport,
 ): Promise<HostResult> {
   if (live?.appId === appId) {
-    if (live.role === 'host') setUi({ mode: 'host', qrPayload: live.qrPayload, roomCode: live.roomCode });
+    if (live.role === 'host') showHost(live);
     return snapshot(live);
   }
   if (live) throw new Error('Auf diesem Gerät läuft schon ein anderer Raum.');
@@ -846,10 +1070,8 @@ export async function sendMultiplayer(appId: string, data: unknown, opts?: { to?
     deliver(session, result);
     return { seq: result.seq };
   }
-  if (!session.guestLink || !session.welcomed) throw new Error('Keine Verbindung zum Raum.');
   const frame: WireFrame = opts?.to ? { t: 'msg', to: opts.to, data: clean } : { t: 'msg', data: clean };
-  session.guestLink.send(encodeFrame(frame));
-  return { seq: 0 };
+  return queueGuestFrame(session, frame);
 }
 
 export async function broadcastMultiplayer(appId: string, data: unknown): Promise<{ seq: number }> {
@@ -857,19 +1079,37 @@ export async function broadcastMultiplayer(appId: string, data: unknown): Promis
   const session = requireSession(appId);
   if (session.role === 'host' && session.room) {
     const result = session.room.broadcast(session.selfId, clean);
+    session.snapshot = clean;
+    session.snapshotSeq = result.seq;
     deliver(session, result);
+    void remember(session);
     return { seq: result.seq };
   }
-  if (!session.guestLink || !session.welcomed) throw new Error('Keine Verbindung zum Raum.');
-  session.guestLink.send(encodeFrame({ t: 'msg', all: true, data: clean }));
-  return { seq: 0 };
+  return queueGuestFrame(session, { t: 'msg', all: true, data: clean });
 }
 
-export function showMultiplayerQr(appId: string): { roomCode: string; qrPayload: string } {
+function queueGuestFrame(session: LiveSession, frame: WireFrame): { seq: number } {
+  const text = encodeFrame(frame);
+  if (session.guestLink && session.welcomed) {
+    session.guestLink.send(text);
+    return { seq: 0 };
+  }
+  if (session.role === 'guest' && !session.giveUp && !session.leaving) {
+    session.outbox.push(text);
+    if (session.outbox.length > MP_LIMITS.gapHoldMax) session.outbox.splice(0, session.outbox.length - MP_LIMITS.gapHoldMax);
+    return { seq: 0 };
+  }
+  throw new Error('Keine Verbindung zum Raum.');
+}
+
+export function showMultiplayerQr(
+  appId: string,
+  focus: MpUiState['qrFocus'] = 'all',
+): { roomCode: string; qrPayload: string; gameUrl: string } {
   const session = requireSession(appId);
   if (session.role !== 'host') throw new Error('Nur der Host zeigt den QR-Code.');
-  setUi({ mode: 'host', qrPayload: session.qrPayload, roomCode: session.roomCode });
-  return { roomCode: session.roomCode, qrPayload: session.qrPayload };
+  showHost(session, focus);
+  return { roomCode: session.roomCode, qrPayload: session.qrPayload, gameUrl: session.gameUrl };
 }
 
 function roomIdFromHandle(handle: string): string {

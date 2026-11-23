@@ -23,7 +23,7 @@ const NOTIFY_RATE: RateRule = { max: 5, windowMs: 60_000 };
 const NET_RATE: RateRule = { max: 12, windowMs: 10_000 };
 
 export interface MethodSpec {
-  category: Permission | 'events';
+  category: Permission | 'events' | 'screen';
   action: string;
   rate: RateRule;
   validate: (args: unknown[]) => unknown[];
@@ -410,6 +410,9 @@ const BRIDGE_METHODS: Record<string, MethodSpec> = {
   'multiplayer.broadcast': method({ category: 'multiplayer', action: 'broadcast', rate: MP_SEND_RATE, validate: multiplayerBroadcast }),
   'multiplayer.leave': method({ category: 'multiplayer', action: 'leave', rate: MP_ROOM_RATE, validate: none }),
   'multiplayer.showQr': method({ category: 'multiplayer', action: 'showQr', validate: none }),
+  'multiplayer.showWifiQr': method({ category: 'multiplayer', action: 'showWifiQr', validate: none }),
+  'multiplayer.showGameQr': method({ category: 'multiplayer', action: 'showGameQr', validate: none }),
+  'multiplayer.showHotspotQr': method({ category: 'multiplayer', action: 'showHotspotQr', validate: none }),
   'multiplayer.discover': method({ category: 'multiplayer', action: 'discover', rate: MP_ROOM_RATE, validate: none }),
   'multiplayer.stopDiscovery': method({ category: 'multiplayer', action: 'stopDiscovery', validate: none }),
   'multiplayer.setDiscoverable': method({ category: 'multiplayer', action: 'setDiscoverable', validate: (a) => (exact(a, 1, 1), [bool(a[0], 'Sichtbar')]) }),
@@ -417,6 +420,12 @@ const BRIDGE_METHODS: Record<string, MethodSpec> = {
   'multiplayer.denyJoin': method({ category: 'multiplayer', action: 'denyJoin', validate: (a) => (exact(a, 1, 1), [str(a[0], 'Anfrage', 64)]) }),
   'multiplayer.endRoom': method({ category: 'multiplayer', action: 'endRoom', rate: MP_ROOM_RATE, validate: none }),
   'multiplayer.resume': method({ category: 'multiplayer', action: 'resume', rate: MP_ROOM_RATE, validate: none }),
+
+  'screen.keepAwake': method({
+    category: 'screen',
+    action: 'keepAwake',
+    validate: (a) => (exact(a, 0, 1), [a.length === 0 ? true : bool(a[0], 'Wach')]),
+  }),
 };
 
 export function bridgeMethod(name: string): MethodSpec | null {

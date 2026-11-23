@@ -99,6 +99,10 @@ test('Trennung behält den Platz, bis der Gast geht', () => {
   assert.notStrictEqual(room.roomId, room.token);
   assert.strictEqual(room.disconnect(guest.player.id, 1000), true);
   assert.strictEqual(room.players().find((player) => player.id === guest.player.id).connected, false);
+  const soon = room.broadcast(room.hostId, { t: 'buzz' }, 5000);
+  assert.ok(soon.targets.includes(guest.player.id));
+  const afterGap = room.broadcast(room.hostId, { t: 'late' }, 1000 + MP_LIMITS.gapHoldMs + 1);
+  assert.ok(!afterGap.targets.includes(guest.player.id));
   const stolen = room.admit({
     appId: 'song', room: room.roomCode, token: room.token, name: 'Fremd', playerId: guest.player.id, secret: '0123456789abcdef',
   }, 2000);

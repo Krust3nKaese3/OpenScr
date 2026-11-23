@@ -1,9 +1,14 @@
-import React, { useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import QRCode from 'qrcode';
 import { decodeJoinUrl } from '../services/multiplayer/qr';
 import type { MpUiState } from '../services/multiplayer/session';
+import { encodeWifiQr } from '../services/multiplayer/guestHttp';
+import { getInviteDraft, setInviteDraft, type InviteDraft } from '../services/multiplayer/invite';
+import { loadWifiPassword, rememberWifiPassword } from '../services/multiplayer/wifiMemory';
+import { openTetherSettings, readWifiLabel, startHotspot } from '../services/multiplayer/lanShare';
+import { useContainerTheme } from '../theme/containerTheme';
 
 interface MultiplayerOverlayProps {
   state: MpUiState | null;
@@ -15,20 +20,53 @@ interface MultiplayerOverlayProps {
   onDeny: (id: string) => void;
 }
 
-/** Großer QR für den Host, Scanner für den Beitritt. Die OpenScrapp zeichnet das nicht selbst. */
+/** Einladung für Browser-Gäste und Scanner für den Beitritt. Die OpenScrapp zeichnet das nicht selbst. */
 export function MultiplayerOverlay({ state, onDone, onEnd, onScanned, onCancel, onApprove, onDeny }: MultiplayerOverlayProps) {
   const [permission, requestPermission] = useCameraPermissions();
   const [scanHint, setScanHint] = useState('');
-  const matrix = useMemo(() => {
-    if (state?.mode !== 'host' || !state.qrPayload) return null;
-    const code = QRCode.create(state.qrPayload, { errorCorrectionLevel: 'M' });
-    const size = code.modules.size;
-    const cells: number[] = [];
-    for (let row = 0; row < size; row++) {
-      for (let col = 0; col < size; col++) cells.push(code.modules.get(row, col));
+  const saved = getInviteDraft();
+  const [step, setStep] = useState<'choose' | 'wlan' | 'hotspot' | 'codes'>(saved ? 'codes' : 'wlan');
+  const [ssid, setSsid] = useState(saved?.ssid || '');
+  const [password, setPassword] = useState(saved?.password || '');
+  const [remember, setRemember] = useState(false);
+  const [detail, setDetail] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [showAppQr, setShowAppQr] = useState(false);
+  const [link, setLink] = useState<'wlan' | 'hotspot'>(saved?.link === 'hotspot' ? 'hotspot' : 'wlan');
+  const tokens = useContainerTheme();
+
+  useEffect(() => {
+    if (state?.mode !== 'host' || !state.qrFocus) return;
+    const draft = getInviteDraft();
+    if (state.qrFocus === 'wifi') {
+      setLink('wlan');
+      setStep(draft?.ssid ? 'codes' : 'wlan');
+    } else if (state.qrFocus === 'hotspot') {
+      setLink('hotspot');
+      setStep(draft?.ssid ? 'codes' : 'hotspot');
+    } else if (state.qrFocus === 'game') {
+      setStep(draft?.ssid ? 'codes' : 'wlan');
+    } else {
+      setStep(draft?.ssid ? 'codes' : 'wlan');
     }
-    return { size, cells };
-  }, [state]);
+  }, [state?.mode, state?.qrFocus, state?.roomCode]);
+
+  useEffect(() => {
+    if (state?.mode !== 'host' || step !== 'wlan') return undefined;
+    let cancel = false;
+    void readWifiLabel().then(async (info) => {
+      if (cancel) return;
+      if (info.ssid) setSsid((current) => current || info.ssid);
+      if (info.detail) setDetail(info.detail);
+      if (!info.ssid) return;
+      const stored = await loadWifiPassword(info.ssid);
+      if (!cancel && stored) {
+        setPassword((current) => current || stored);
+        setRemember(true);
+      }
+    });
+    return () => { cancel = true; };
+  }, [state?.mode, step]);
 
   if (!state) return null;
 
@@ -85,27 +123,154 @@ export function MultiplayerOverlay({ state, onDone, onEnd, onScanned, onCancel, 
     );
   }
 
-  const cell = matrix ? Math.max(3, Math.floor(260 / matrix.size)) : 0;
+  const wifiPayload = ssid ? encodeWifiQr(ssid, password) : '';
+  const finish = (nextLink: InviteDraft['link'], nextSsid = ssid, nextPassword = password) => {
+    const name = nextSsid.trim();
+    setSsid(name);
+    setPassword(nextPassword);
+    setLink(nextLink);
+    setInviteDraft({ link: nextLink, ssid: name, password: nextPassword });
+    void rememberWifiPassword(name, nextPassword, remember);
+    setStep('codes');
+  };
+  const ready = step === 'codes' && !!ssid.trim() && !!password;
+  const guests = state.connectedGuests || 0;
+  const chip = link === 'hotspot'
+    ? (ssid ? `Hotspot an${guests ? ` · ${guests} verbunden` : ''}` : 'Hotspot aus')
+    : (ssid ? `WLAN · ${ssid}` : 'WLAN wählen');
+
   return (
-    <View style={styles.screen}>
-      <Text style={styles.title}>Mitspieler einladen</Text>
-      <Text style={styles.code}>{state.roomCode}</Text>
-      {matrix ? (
-        <View style={styles.qrPad}>
-          <View style={{ width: cell * matrix.size, height: cell * matrix.size, flexDirection: 'row', flexWrap: 'wrap' }}>
-            {matrix.cells.map((bit, index) => (
-              <View key={index} style={{ width: cell, height: cell, backgroundColor: bit ? '#000' : '#fff' }} />
-            ))}
-          </View>
+    <View style={[styles.screen, { backgroundColor: tokens.bg }]}>
+      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <View style={styles.topBar}>
+          <TouchableOpacity onPress={onDone} accessibilityLabel="Zurück" style={styles.hit}>
+            <Text style={[styles.back, { color: tokens.text }]}>←</Text>
+          </TouchableOpacity>
+          <View style={{ flex: 1 }} />
+          <TouchableOpacity
+            onPress={() => {
+              Alert.alert('Einladen', 'Gäste scannen beide Codes mit der normalen Kamera. OpenScr brauchen sie nicht.', [
+                { text: 'Schließen', style: 'cancel' },
+                { text: 'Raum beenden', style: 'destructive', onPress: onEnd },
+              ]);
+            }}
+            accessibilityLabel="Hilfe"
+            style={[styles.help, { borderColor: tokens.lime }]}
+          >
+            <Text style={{ color: tokens.lime, fontWeight: '700' }}>?</Text>
+          </TouchableOpacity>
         </View>
-      ) : null}
-      <Text style={styles.hint}>Gleiches WLAN oder Hotspot. Der Code enthält die lokale Adresse.</Text>
-      <TouchableOpacity style={styles.primary} onPress={onDone}>
-        <Text style={styles.primaryText}>Fertig</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.secondary} onPress={onEnd}>
-        <Text style={styles.secondaryText}>Raum beenden</Text>
-      </TouchableOpacity>
+        <Text style={[styles.title, { color: tokens.text }]}>Mitspieler einladen</Text>
+        <Text style={[styles.sub, { color: tokens.muted }]}>{state.roomCode}</Text>
+        {state.batteryWarning ? <Text style={styles.warn}>{state.batteryWarning}</Text> : null}
+        <View style={[styles.segment, { backgroundColor: tokens.card }]}>
+          <TouchableOpacity style={[styles.segmentItem, link === 'wlan' ? { backgroundColor: tokens.lime } : null]} onPress={() => { setLink('wlan'); setStep(getInviteDraft()?.link === 'wlan' && ssid ? 'codes' : 'wlan'); }}>
+            <Text style={[styles.segmentText, { color: link === 'wlan' ? tokens.ink : tokens.muted }]}>WLAN</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.segmentItem, link === 'hotspot' ? { backgroundColor: tokens.lime } : null]} onPress={() => { setLink('hotspot'); setStep(getInviteDraft()?.link === 'hotspot' && ssid ? 'codes' : 'hotspot'); }}>
+            <Text style={[styles.segmentText, { color: link === 'hotspot' ? tokens.ink : tokens.muted }]}>Hotspot</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={[styles.chip, { backgroundColor: tokens.card }]}>
+          <View style={[styles.chipDot, { backgroundColor: ssid ? tokens.lime : tokens.muted }]} />
+          <Text style={[styles.chipText, { color: tokens.text }]}>{chip}</Text>
+        </View>
+        {ready ? (
+          <>
+            <View style={styles.stepRow}>
+              <View style={[styles.stepBadge, { backgroundColor: tokens.lime }]}><Text style={[styles.stepNum, { color: tokens.ink }]}>1</Text></View>
+              <Text style={[styles.stepTitle, { color: tokens.text }]}>{link === 'hotspot' ? 'Mit Hotspot verbinden' : 'Mit WLAN verbinden'}</Text>
+            </View>
+            <View style={[styles.qrCard, { backgroundColor: tokens.card }]}>
+              <QrBlock payload={wifiPayload} size={220} />
+            </View>
+            <View style={styles.stepRow}>
+              <View style={[styles.stepBadge, { backgroundColor: tokens.lime }]}><Text style={[styles.stepNum, { color: tokens.ink }]}>2</Text></View>
+              <Text style={[styles.stepTitle, { color: tokens.text }]}>Spiel öffnen</Text>
+            </View>
+            <View style={[styles.gameCard, { backgroundColor: tokens.card }]}>
+              {state.gameUrl ? <QrBlock payload={state.gameUrl} size={72} /> : <Text style={[styles.gameText, { color: tokens.muted }]}>Der Browser-Server braucht einen Build mit TCP.</Text>}
+              <Text style={[styles.gameText, { color: tokens.text }]}>Scanne den Code mit der normalen Kamera. Du brauchst OpenScr nicht.</Text>
+            </View>
+            <TouchableOpacity onPress={() => setShowAppQr((value) => !value)}>
+              <Text style={[styles.quiet, { color: tokens.muted }]}>{showAppQr ? 'App-Code ausblenden' : 'Code für die OpenScr-App'}</Text>
+            </TouchableOpacity>
+            {showAppQr && state.qrPayload ? <QrBlock payload={state.qrPayload} size={140} /> : null}
+            <TouchableOpacity style={[styles.primary, { backgroundColor: tokens.lime }]} onPress={onDone}>
+              <Text style={[styles.primaryText, { color: tokens.ink }]}>Spiel starten</Text>
+            </TouchableOpacity>
+          </>
+        ) : link === 'hotspot' ? (
+          <>
+            <Text style={[styles.hint, { color: tokens.muted }]}>Der Hotspot dieses Handys. Wenn Android die Zugangsdaten nicht herausgibt, tippst du sie ab.</Text>
+            <TouchableOpacity
+              style={[styles.primary, { backgroundColor: tokens.lime }]}
+              onPress={() => {
+                setBusy(true);
+                void startHotspot().then((result) => {
+                  setBusy(false);
+                  setDetail(result.detail);
+                  if (result.ok && result.ssid && result.password) finish('hotspot', result.ssid, result.password);
+                  else {
+                    if (result.ssid) setSsid(result.ssid);
+                    if (result.password) setPassword(result.password);
+                  }
+                });
+              }}
+            >
+              {busy ? <ActivityIndicator color={tokens.ink} /> : <Text style={[styles.primaryText, { color: tokens.ink }]}>Hotspot einschalten</Text>}
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => { void openTetherSettings(); }}>
+              <Text style={[styles.quiet, { color: tokens.muted }]}>Systemeinstellungen öffnen</Text>
+            </TouchableOpacity>
+            {detail ? <Text style={[styles.hint, { color: tokens.muted }]}>{detail}</Text> : null}
+            <TextInput style={[styles.input, { backgroundColor: tokens.card, color: tokens.text }]} value={ssid} onChangeText={setSsid} placeholder="Hotspot-Name" placeholderTextColor={tokens.muted} autoCapitalize="none" />
+            <TextInput style={[styles.input, { backgroundColor: tokens.card, color: tokens.text }]} value={password} onChangeText={setPassword} placeholder="Hotspot-Passwort" placeholderTextColor={tokens.muted} autoCapitalize="none" secureTextEntry />
+            <TouchableOpacity onPress={() => setRemember((value) => !value)}>
+              <Text style={[styles.hint, { color: tokens.muted }]}>{remember ? '☑' : '☐'} Passwort auf diesem Gerät merken</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.primary, { backgroundColor: tokens.lime, opacity: !ssid.trim() || !password ? 0.4 : 1 }]} onPress={() => finish('hotspot')} disabled={!ssid.trim() || !password}>
+              <Text style={[styles.primaryText, { color: tokens.ink }]}>QR-Codes zeigen</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            <Text style={[styles.hint, { color: tokens.muted }]}>{detail || 'Dieses Handy ist in diesem WLAN.'}</Text>
+            <TextInput style={[styles.input, { backgroundColor: tokens.card, color: tokens.text }]} value={ssid} onChangeText={setSsid} placeholder="WLAN-Name" placeholderTextColor={tokens.muted} autoCapitalize="none" />
+            <TextInput style={[styles.input, { backgroundColor: tokens.card, color: tokens.text }]} value={password} onChangeText={setPassword} placeholder="WLAN-Passwort" placeholderTextColor={tokens.muted} autoCapitalize="none" secureTextEntry />
+            <TouchableOpacity onPress={() => setRemember((value) => !value)}>
+              <Text style={[styles.hint, { color: tokens.muted }]}>{remember ? '☑' : '☐'} Passwort auf diesem Gerät merken</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.primary, { backgroundColor: tokens.lime, opacity: !ssid.trim() || !password ? 0.4 : 1 }]} onPress={() => finish('wlan')} disabled={!ssid.trim() || !password}>
+              <Text style={[styles.primaryText, { color: tokens.ink }]}>QR-Codes zeigen</Text>
+            </TouchableOpacity>
+          </>
+        )}
+      </ScrollView>
+    </View>
+  );
+}
+
+function QrBlock({ payload, size: edge = 200 }: { payload: string; size?: number }) {
+  const matrix = useMemo(() => {
+    if (!payload) return null;
+    const code = QRCode.create(payload, { errorCorrectionLevel: 'M' });
+    const size = code.modules.size;
+    const cells: number[] = [];
+    for (let row = 0; row < size; row++) {
+      for (let col = 0; col < size; col++) cells.push(code.modules.get(row, col) ? 1 : 0);
+    }
+    return { size, cells };
+  }, [payload]);
+  if (!matrix) return null;
+  const cell = Math.max(2, Math.floor(edge / matrix.size));
+  return (
+    <View style={styles.qrPad}>
+      <View style={{ width: cell * matrix.size, height: cell * matrix.size, flexDirection: 'row', flexWrap: 'wrap' }}>
+        {matrix.cells.map((bit, index) => (
+          <View key={index} style={{ width: cell, height: cell, backgroundColor: bit ? '#000' : '#fff' }} />
+        ))}
+      </View>
     </View>
   );
 }
@@ -118,20 +283,38 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     zIndex: 30,
-    backgroundColor: '#0f1115',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
+    backgroundColor: '#0B0B0F',
   },
+  scroll: { paddingHorizontal: 22, paddingTop: 48, paddingBottom: 36 },
+  topBar: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  hit: { width: 36, height: 36, justifyContent: 'center' },
+  back: { fontSize: 24, fontWeight: '600' },
+  help: { width: 32, height: 32, borderRadius: 16, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
   camera: { flex: 1, alignSelf: 'stretch', marginBottom: 16 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  title: { color: '#fff', fontSize: 22, fontWeight: '700', marginBottom: 8 },
-  code: { color: '#fff', fontSize: 40, letterSpacing: 6, fontWeight: '800', marginBottom: 16 },
-  qrPad: { backgroundColor: '#fff', padding: 12, borderRadius: 12, marginBottom: 16 },
-  hint: { color: '#d5d8e0', fontSize: 15, textAlign: 'center', marginBottom: 16 },
+  title: { color: '#F4F4F5', fontSize: 32, fontWeight: '700', letterSpacing: -0.6 },
+  sub: { fontSize: 16, marginTop: 2, marginBottom: 16 },
+  segment: { flexDirection: 'row', borderRadius: 24, padding: 4, marginBottom: 14 },
+  segmentItem: { flex: 1, borderRadius: 20, paddingVertical: 10, alignItems: 'center' },
+  segmentText: { fontSize: 15, fontWeight: '700' },
+  chip: { alignSelf: 'center', flexDirection: 'row', alignItems: 'center', borderRadius: 16, paddingHorizontal: 12, paddingVertical: 6, marginBottom: 18 },
+  chipDot: { width: 8, height: 8, borderRadius: 4, marginRight: 8 },
+  chipText: { fontSize: 14, fontWeight: '600' },
+  stepRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10, marginTop: 6 },
+  stepBadge: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center', marginRight: 10 },
+  stepNum: { fontWeight: '800' },
+  stepTitle: { fontSize: 18, fontWeight: '700' },
+  qrCard: { borderRadius: 18, alignItems: 'center', paddingVertical: 16, marginBottom: 16 },
+  gameCard: { borderRadius: 18, flexDirection: 'row', alignItems: 'center', padding: 12, gap: 12, marginBottom: 8 },
+  gameText: { flex: 1, fontSize: 14, lineHeight: 20 },
+  quiet: { textAlign: 'center', marginVertical: 8, fontSize: 14 },
+  qrPad: { backgroundColor: '#fff', padding: 8, borderRadius: 12 },
+  hint: { color: '#8E8E93', fontSize: 15, textAlign: 'center', marginBottom: 12 },
+  warn: { color: '#1a1206', backgroundColor: '#f0c14a', borderRadius: 10, padding: 10, marginBottom: 12, textAlign: 'center', overflow: 'hidden' },
   hintBar: { position: 'absolute', left: 16, right: 16, bottom: 28, alignItems: 'center' },
-  primary: { backgroundColor: '#2f6fed', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 28, marginBottom: 10 },
-  primaryText: { color: '#fff', fontSize: 17, fontWeight: '700' },
+  input: { alignSelf: 'stretch', borderRadius: 14, padding: 14, marginBottom: 10 },
+  primary: { backgroundColor: '#A3E635', borderRadius: 18, paddingVertical: 16, alignItems: 'center', marginTop: 12 },
+  primaryText: { color: '#0B0B0F', fontSize: 17, fontWeight: '700' },
   secondary: { paddingVertical: 10, paddingHorizontal: 16 },
-  secondaryText: { color: '#fff', fontSize: 16 },
+  secondaryText: { color: '#F4F4F5', fontSize: 16 },
 });

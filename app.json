@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "orientation": "default",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "dark",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.openscr.app",
@@ -33,7 +33,9 @@
         "FOREGROUND_SERVICE_CONNECTED_DEVICE",
         "FOREGROUND_SERVICE_SHORT_SERVICE",
         "RECEIVE_BOOT_COMPLETED",
-        "WAKE_LOCK"
+        "WAKE_LOCK",
+        "CHANGE_WIFI_STATE",
+        "NEARBY_WIFI_DEVICES"
       ],
       "blockedPermissions": [
         "android.permission.RECORD_AUDIO",
@@ -52,10 +54,10 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#2E2E33",
+          "backgroundColor": "#0B0B0F",
           "image": "./assets/splash-icon.png",
           "dark": {
-            "backgroundColor": "#2E2E33",
+            "backgroundColor": "#0B0B0F",
             "image": "./assets/splash-icon.png"
           }
         }

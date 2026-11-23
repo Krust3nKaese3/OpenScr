@@ -8,12 +8,12 @@ import { isStoredRelPath, normalizeEntrypoint } from './miniAppFiles';
 
 export type InstallMode = 'open' | 'catalog-only' | 'own-repos-only';
 
-const IOS_ALLOWED = new Set<string>(['storage', 'http', 'sensors', 'ble', 'vibration', 'events']);
+const IOS_ALLOWED = new Set<string>(['storage', 'http', 'sensors', 'ble', 'vibration', 'screen', 'events']);
 
 export const IOS_CAPABILITY_ERROR =
-  'Diese Funktion ist auf iOS nicht verfügbar. Erlaubt sind Speicher, Sensoren, HTTP, Bluetooth LE und Vibration.';
+  'Diese Funktion ist auf iOS nicht verfügbar. Erlaubt sind Speicher, Sensoren, HTTP, Bluetooth LE, Vibration und Bildschirm wachhalten.';
 
-export const IOS_ALLOWED_LABELS = ['Speicher', 'Sensoren', 'HTTP', 'Bluetooth LE', 'Vibration'] as const;
+export const IOS_ALLOWED_LABELS = ['Speicher', 'Sensoren', 'HTTP', 'Bluetooth LE', 'Vibration', 'Bildschirm wachhalten'] as const;
 
 export function isIosLearningPlatform(platform: string): boolean {
   return platform === 'ios';

@@ -1,6 +1,7 @@
 package expo.modules.spotify
 
 import android.app.Activity
+import android.app.KeyguardManager
 import android.content.Context
 import android.content.Intent
 import android.os.Handler
@@ -67,6 +68,39 @@ object SpotifyRuntime {
 
   private var pendingLogin: Promise? = null
   private var pendingPkce: PKCEInformation? = null
+  private var userStopped = false
+  private var reconnectAttempt = 0
+  private var reconnectScheduled = false
+  private var unlockNoticeSent = false
+
+  private fun prefs(ctx: Context) =
+    ctx.applicationContext.getSharedPreferences("openscr_spotify_remote", Context.MODE_PRIVATE)
+
+  private fun remembered(ctx: Context) = prefs(ctx).getBoolean("had", false)
+
+  private fun remember(ctx: Context) {
+    prefs(ctx).edit().putBoolean("had", true).apply()
+  }
+
+  private fun forget(ctx: Context) {
+    prefs(ctx).edit().remove("had").apply()
+  }
+
+  private fun keyguardLocked(ctx: Context): Boolean {
+    val km = ctx.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager ?: return false
+    return km.isKeyguardLocked
+  }
+
+  /** Spotify's auth activity is not shown over the lock screen. */
+  private fun allowAuthView(ctx: Context, requested: Boolean) = requested && !keyguardLocked(ctx)
+
+  private fun lockAware(ctx: Context, message: String): String {
+    if (!keyguardLocked(ctx)) return message
+    if (message == SpotifyText.NOT_AUTHORIZED || message == SpotifyText.AUTH_FAILED || message == SpotifyText.NOT_LOGGED_IN) {
+      return SpotifyText.AUTH_NEEDS_UNLOCK
+    }
+    return message
+  }
 
   fun attach(ctx: Context, emit: (String, String) -> Unit) {
     app = ctx.applicationContext
@@ -144,6 +178,11 @@ object SpotifyRuntime {
     } catch (e: SpotifyUserException) {
       SpotifyLog.add(ctx, "Login abgebrochen: keine Client-ID")
       promise.reject("E_SPOTIFY", e.message ?: "Spotify-Fehler", e)
+      return
+    }
+    if (keyguardLocked(ctx)) {
+      SpotifyLog.add(ctx, "Login abgebrochen: Handy ist gesperrt")
+      promise.reject("E_SPOTIFY", SpotifyText.AUTH_NEEDS_UNLOCK, null)
       return
     }
     main.post {
@@ -249,6 +288,8 @@ object SpotifyRuntime {
   }
 
   fun logout(ctx: Context) {
+    userStopped = true
+    forget(ctx)
     disconnect(ctx, "logout")
     SpotifyTokenStore.clear(ctx)
     lastPremium = null
@@ -267,13 +308,38 @@ object SpotifyRuntime {
       promise.reject("E_SPOTIFY", e.message ?: "Spotify-Fehler", e)
       return
     }
-    ensureConnected(ctx, showAuth, { promise.resolve(status(ctx)) }, { e ->
-      val msg = if (e is SpotifyUserException) e.message ?: SpotifyText.DISCONNECTED else germanRemote(e)
+    userStopped = false
+    ensureConnected(ctx, allowAuthView(ctx, showAuth), { promise.resolve(status(ctx)) }, { e ->
+      val msg = lockAware(ctx, if (e is SpotifyUserException) e.message ?: SpotifyText.DISCONNECTED else germanRemote(e))
       fail(promise, msg, e)
     })
   }
 
+  /**
+   * Restores App Remote after a drop, a screen-on, or a lock-screen relaunch.
+   * Never opens Spotify's auth view. Failures are events, not a thrown login.
+   */
+  fun reconnectIfRemembered() {
+    val ctx = ctxOrNull() ?: return
+    if (userStopped || !remembered(ctx)) return
+    if (synchronized(lock) { remote?.isConnected == true || connecting }) return
+    ensureConnected(ctx, false, { unlockNoticeSent = false }, { e ->
+      val msg = lockAware(ctx, if (e is SpotifyUserException) e.message ?: SpotifyText.DISCONNECTED else germanRemote(e))
+      if (msg == SpotifyText.AUTH_NEEDS_UNLOCK) {
+        if (unlockNoticeSent) return@ensureConnected
+        unlockNoticeSent = true
+      }
+      SpotifyLog.add(ctx, "stille Wiederverbindung: $msg")
+      if (msg != SpotifyText.AUTH_NEEDS_UNLOCK && msg != SpotifyText.NOT_INSTALLED) scheduleRetry(ctx)
+    })
+  }
+
   fun disconnect(ctx: Context, reason: String, emit: Boolean = true) {
+    val forgetSession = reason == "disconnect" || reason == "logout" || reason == "client-id-changed"
+    if (forgetSession || reason == "module-destroy") userStopped = true
+    if (forgetSession) forget(ctx)
+    reconnectScheduled = false
+    reconnectAttempt = 0
     val previous = synchronized(lock) {
       closing = true
       connecting = false
@@ -350,6 +416,10 @@ object SpotifyRuntime {
           copy
         }
         SpotifyLog.add(ctx, "App Remote verbunden")
+        remember(ctx)
+        userStopped = false
+        reconnectAttempt = 0
+        unlockNoticeSent = false
         subscribe(ctx, appRemote)
         emit("connected", JSONObject().put("premium", JSONObject.NULL).toString())
         waiters.forEach { (success, _) -> success(appRemote) }
@@ -363,9 +433,10 @@ object SpotifyRuntime {
           connectWaiters.clear()
           copy
         }
-        SpotifyLog.add(ctx, "App Remote Fehler: $msg")
-        emit("error", JSONObject().put("message", msg).toString())
-        val wrapped = SpotifyUserException(msg)
+        val shown = lockAware(ctx, msg)
+        SpotifyLog.add(ctx, "App Remote Fehler: $shown")
+        emit("error", JSONObject().put("message", shown).toString())
+        val wrapped = SpotifyUserException(shown)
         waiters.forEach { (_, failure) -> failure(wrapped) }
       }
     })
@@ -394,6 +465,7 @@ object SpotifyRuntime {
         }
         emit("disconnected", JSONObject().put("reason", "connection-dropped").toString())
         emit("error", JSONObject().put("message", SpotifyText.DISCONNECTED).toString())
+        if (!userStopped && remembered(ctx)) scheduleRetry(ctx)
       }
     })
     try {
@@ -441,7 +513,8 @@ object SpotifyRuntime {
       return
     }
     SpotifyLog.add(ctx, "play $clean @ ${positionMs.toLong()}ms")
-    ensureConnected(ctx, true, { appRemote ->
+    userStopped = false
+    ensureConnected(ctx, allowAuthView(ctx, true), { appRemote ->
       ensureCanPlay(appRemote, clean, {
         val call = appRemote.playerApi.play(clean)
         call.setResultCallback {
@@ -456,9 +529,22 @@ object SpotifyRuntime {
         call.setErrorCallback { e -> fail(promise, germanRemote(e), e) }
       }, { message -> fail(promise, message, null) })
     }, { e ->
-      val msg = if (e is SpotifyUserException) e.message ?: SpotifyText.DISCONNECTED else germanRemote(e)
+      val msg = lockAware(ctx, if (e is SpotifyUserException) e.message ?: SpotifyText.DISCONNECTED else germanRemote(e))
       fail(promise, msg, e)
     })
+  }
+
+  private fun scheduleRetry(ctx: Context) {
+    if (userStopped || closing || reconnectScheduled || reconnectAttempt >= 3) return
+    if (!remembered(ctx)) return
+    reconnectScheduled = true
+    val delay = 1200L * (reconnectAttempt + 1)
+    reconnectAttempt += 1
+    main.postDelayed({
+      reconnectScheduled = false
+      if (userStopped || closing) return@postDelayed
+      reconnectIfRemembered()
+    }, delay)
   }
 
   private fun ensureCanPlay(appRemote: SpotifyAppRemote, uri: String, ok: () -> Unit, err: (String) -> Unit) {

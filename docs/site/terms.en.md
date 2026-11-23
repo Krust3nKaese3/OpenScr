@@ -32,13 +32,13 @@ If you install an address on Android that is not in the catalog (typed URL, QR c
 
 The iOS version has no catalog. You sign in with your GitHub account (device flow or a personal token stored only on this device). After that, only repositories owned by that account can be loaded. Other links, QR codes and add-links are rejected. Ownership is checked again on add, on update and on open. Signing out disables those OpenScrapps. A remote catalog file cannot change that.
 
-On iOS, OpenScr gives an OpenScrapp only storage, sensors, HTTP, Bluetooth LE and vibration. Background tasks, tiles, popups, raw sockets and other features outside the visible development environment are not available there.
+On iOS, OpenScr gives an OpenScrapp only storage, sensors, HTTP, Bluetooth LE, vibration and keeping the screen awake. Background tasks, tiles, popups, raw sockets and other features outside the visible development environment are not available there.
 
 An Android build with `EXPO_PUBLIC_CATALOG_ONLY=1` (profile `production-catalog`) does not allow free GitHub links and keeps the catalog. The Android build for Google Play keeps free installation with a warning.
 
 ## Permissions
 
-An OpenScrapp receives device features only after one-time consent for that OpenScrapp. On Android that includes Spotify, storage and multiplayer. On iOS the bridge is limited to storage, sensors, HTTP, Bluetooth LE and vibration. You can revoke consent in the app info. Without consent the feature stays off.
+An OpenScrapp receives device features only after one-time consent for that OpenScrapp. On Android that includes Spotify, storage and multiplayer. On iOS the bridge is limited to storage, sensors, HTTP, Bluetooth LE, vibration and keeping the screen awake. You can revoke consent in the app info. Without consent the feature stays off.
 
 OpenScr does not give OpenScrapps the file system, contacts or GPS coordinates. The camera reads QR codes. The microphone is not used. This release does not include a location permission.
 

@@ -10,6 +10,7 @@ import {
 } from './appPurge';
 import { GitRepoService } from './GitRepoService';
 import { SecretStore } from './SecretStore';
+import { SHOW_OVER_LOCK_KEY, clearOverLockNotice, readShowOverLockMap } from './showOverLock';
 
 const APPS_KEY = '@everyapp_apps';
 const FOLDERS_KEY = '@everyapp_folders';
@@ -56,13 +57,14 @@ export class StorageService {
     const ids = knownAppIds && knownAppIds.length > 0 ? knownAppIds : [appId];
     try { await SecretStore.purge(appId); } catch (error) { console.error('[EveryApp] secret purge', error); }
 
-    const [permissionRaw, deniedRaw, backgroundRaw, tasksRaw, uiRaw, lockRaw, allKeys] = await Promise.all([
+    const [permissionRaw, deniedRaw, backgroundRaw, tasksRaw, uiRaw, lockRaw, overLockRaw, allKeys] = await Promise.all([
       AsyncStorage.getItem(PERMISSIONS_KEY),
       AsyncStorage.getItem(DENIED_KEY),
       AsyncStorage.getItem(BACKGROUND_APPS_KEY),
       AsyncStorage.getItem(TASKS_KEY),
       AsyncStorage.getItem(UI_KEY),
       AsyncStorage.getItem(LOCK_ASKED_KEY),
+      AsyncStorage.getItem(SHOW_OVER_LOCK_KEY),
       AsyncStorage.getAllKeys(),
     ]);
     const uiRecord = parseJsonRecord(uiRaw);
@@ -77,7 +79,10 @@ export class StorageService {
       },
       lockAsked: parseJsonRecord(lockRaw),
     };
+    try { clearOverLockNotice(appId); } catch { /* Älterer Build hat die Meldung nicht. */ }
     const next = purgeHostRecords(current, appId);
+    const overLock = readShowOverLockMap(overLockRaw);
+    delete overLock[appId];
     await AsyncStorage.multiSet([
       [PERMISSIONS_KEY, JSON.stringify(next.permissions)],
       [DENIED_KEY, JSON.stringify(next.denied)],
@@ -85,6 +90,7 @@ export class StorageService {
       [TASKS_KEY, JSON.stringify(next.tasks)],
       [UI_KEY, JSON.stringify(next.ui)],
       [LOCK_ASKED_KEY, JSON.stringify(next.lockAsked)],
+      [SHOW_OVER_LOCK_KEY, JSON.stringify(overLock)],
     ]);
     const owned = keysOwnedByApp(allKeys, appId, ids);
     if (owned.length > 0) await AsyncStorage.multiRemove(owned);
