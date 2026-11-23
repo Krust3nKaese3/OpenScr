@@ -310,6 +310,7 @@ async function startBrowserGuest(session: LiveSession): Promise<void> {
       room: session.roomCode,
       preferredPort: session.guestPort,
       listen,
+      entry: content?.entry,
       read: async (rel) => {
         if (!content) return null;
         return content.read(rel || content.entry);

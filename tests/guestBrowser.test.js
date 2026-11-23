@@ -89,6 +89,8 @@ test('Gastseite setzt die Brücke und merkt sich die Identität', () => {
   const html = injectGuestDocument('<html><head></head><body>Spiel</body></html>', '0123456789abcdef', 'wolf', 'K7QP');
   assert.match(html, /<base href="\/g\/0123456789abcdef\/">/);
   assert.match(html, /openscr-guest-error/);
+  assert.match(html, /Datei nicht geladen/);
+  assert.match(html, /Kopieren/);
   assert.match(html, /openscr-guest\.js/);
   assert.match(html, /"appId":"wolf"/);
   assert.match(html, /Spiel/);
@@ -122,15 +124,24 @@ test('echter Socket liefert die Gastseite', async () => {
     appId: 'wolf',
     room: 'K7QP',
     listen: nodeListen,
-    read: async () => ({ mime: 'text/html', body: utf8Encode('<html><head></head><body>Hi</body></html>') }),
+    entry: 'index.html',
+    read: async (rel) => {
+      if (rel === 'app.js') return { mime: 'text/javascript', body: utf8Encode('window.__spiel=1;') };
+      if (rel) return null;
+      return { mime: 'text/html', body: utf8Encode('<html><head></head><body>Hi<script src="app.js"></script></body></html>') };
+    },
     onLink() {},
   });
   try {
     const text = await httpGet(server.port, `/g/${token}/`);
     assert.match(text, /openscr-guest\.js/);
     assert.match(text, /Hi/);
+    assert.match(text, /window\.__spiel=1/);
+    assert.doesNotMatch(text, /src="app\.js"/);
     const missing = await httpGet(server.port, '/g/0000000000000000/');
     assert.match(missing, /^HTTP\/1\.1 404/);
+    const gone = await httpGet(server.port, `/g/${token}/fehlt.js`);
+    assert.match(gone, /Nicht gefunden: fehlt\.js/);
   } finally {
     server.close();
   }

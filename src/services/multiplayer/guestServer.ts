@@ -3,6 +3,7 @@
  * In der App ist das react-native-tcp-socket. Tests benutzen einen Ersatz.
  */
 import type { MpLink } from './transport';
+import { isTextMime, parentDir, rewriteHtmlAssets } from '../miniAppFiles';
 import {
   GUEST_SHIM_SOURCE,
   concatBytes,
@@ -50,6 +51,7 @@ export async function openGuestServer(opts: {
   room: string;
   preferredPort?: number;
   listen: ByteListen;
+  entry?: string;
   read: (rel: string) => Promise<GuestFile | null>;
   onLink: (link: MpLink) => void;
 }): Promise<GuestServer> {
@@ -85,7 +87,7 @@ export async function openGuestServer(opts: {
 
 function bindHttp(
   conn: ByteConn,
-  opts: { token: string; appId: string; room: string; read: (rel: string) => Promise<GuestFile | null>; onLink: (link: MpLink) => void },
+  opts: { token: string; appId: string; room: string; entry?: string; read: (rel: string) => Promise<GuestFile | null>; onLink: (link: MpLink) => void },
   done: () => void,
 ): void {
   let buffer: Uint8Array<ArrayBufferLike> = new Uint8Array();
@@ -185,7 +187,7 @@ function bindHttp(
 }
 
 async function serveFile(
-  opts: { token: string; appId: string; room: string; read: (rel: string) => Promise<GuestFile | null> },
+  opts: { token: string; appId: string; room: string; entry?: string; read: (rel: string) => Promise<GuestFile | null> },
   rel: string,
 ): Promise<Uint8Array> {
   if (rel === 'openscr-guest.js') {
@@ -193,17 +195,46 @@ async function serveFile(
   }
   const file = await opts.read(rel);
   if (!file) {
-    if (rel) return textResponse(404, 'Nicht gefunden.');
+    if (rel) return textResponse(404, `Nicht gefunden: ${rel}`);
     const html = injectGuestDocument('<p>Die OpenScrapp ist noch nicht geladen.</p>', opts.token, opts.appId, opts.room);
     return httpBytes(200, 'OK', { 'content-type': 'text/html; charset=utf-8' }, utf8Encode(html));
   }
   if (file.body.length > MAX_FILE) return textResponse(413, 'Datei zu groß.');
   const mime = file.mime || 'application/octet-stream';
-  const body = mime.startsWith('text/html')
-    ? utf8Encode(injectGuestDocument(utf8Slice(file.body), opts.token, opts.appId, opts.room))
-    : file.body;
+  let payload = file.body;
+  if (mime.startsWith('text/html')) {
+    const baseDir = parentDir(rel || opts.entry || '');
+    const inlined = await inlineGuestHtml(utf8Slice(file.body), baseDir, opts.read);
+    payload = utf8Encode(injectGuestDocument(inlined, opts.token, opts.appId, opts.room));
+  }
   const type = mime.startsWith('text/') || mime.includes('javascript') || mime.includes('json') ? `${mime}; charset=utf-8` : mime;
-  return httpBytes(200, 'OK', { 'content-type': type }, body);
+  return httpBytes(200, 'OK', { 'content-type': type }, payload);
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
+/** Dieselben lokalen Dateien wie die WebView einbetten, damit der Desktop-Browser sie nicht extra laden muss. */
+async function inlineGuestHtml(html: string, baseDir: string, read: (rel: string) => Promise<GuestFile | null>): Promise<string> {
+  try {
+    return await rewriteHtmlAssets(html, baseDir, 'openscr.guest', async (rel) => {
+      const file = await read(rel);
+      if (!file) return null;
+      return {
+        mime: file.mime,
+        base64: bytesToBase64(file.body),
+        text: isTextMime(file.mime) ? utf8Slice(file.body) : null,
+      };
+    });
+  } catch {
+    return html;
+  }
 }
 
 function textResponse(status: number, message: string): Uint8Array {
