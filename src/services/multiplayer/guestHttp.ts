@@ -36,9 +36,11 @@ export function shareableGameUrl(url: string): string {
   return url;
 }
 
+const GUEST_ERROR_WATCH = `<script>(function(){function show(text){var box=document.getElementById('openscr-guest-error');if(!box){box=document.createElement('pre');box.id='openscr-guest-error';box.setAttribute('style','position:fixed;left:12px;right:12px;bottom:12px;max-height:46vh;overflow:auto;z-index:2147483646;background:#1c140c;color:#fff;padding:12px;border-radius:12px;white-space:pre-wrap;font:14px/1.4 ui-monospace,monospace');(document.body||document.documentElement).appendChild(box);}box.textContent+=text+'\\n';}window.addEventListener('error',function(event){var where=event.filename?' ('+event.filename+':'+(event.lineno||0)+')':'';show(String((event.error&&event.error.stack)||event.message||'Skriptfehler')+where);},true);window.addEventListener('unhandledrejection',function(event){var reason=event.reason;show(String((reason&&reason.stack)||reason||'Promise abgelehnt'));});})();</script>`;
+
 export function guestBootTags(token: string, appId: string, room: string): string {
   const payload = scriptJson({ appId, room });
-  return `<base href="/g/${token}/"><script>window.__OPEN_SCR_GUEST__=${payload};</script><script src="openscr-guest.js"></script>`;
+  return `<base href="/g/${token}/">${GUEST_ERROR_WATCH}<script>window.__OPEN_SCR_GUEST__=${payload};</script><script src="openscr-guest.js"></script>`;
 }
 
 export function injectGuestDocument(html: string, token: string, appId: string, room: string): string {
@@ -51,6 +53,8 @@ export interface GuestTarget {
   ok: true;
   rel: string;
   websocket: boolean;
+  /** Slashless document URL. The browser must land on /g/<token>/ so relative files resolve. */
+  redirect?: string;
 }
 
 export function resolveGuestPath(urlPath: string, token: string): GuestTarget | { ok: false; status: number; message: string } {
@@ -66,6 +70,8 @@ export function resolveGuestPath(urlPath: string, token: string): GuestTarget | 
   const parts = decoded.split('/');
   if (parts[0] !== '' || parts[1] !== 'g' || !parts[2]) return { ok: false, status: 404, message: 'Nicht gefunden.' };
   if (!sameSecret(parts[2], token)) return { ok: false, status: 404, message: 'Nicht gefunden.' };
+  const query = cut === -1 ? '' : urlPath.slice(cut);
+  if (parts.length === 3) return { ok: true, rel: '', websocket: false, redirect: `/g/${parts[2]}/${query}` };
   const rest = parts.slice(3).join('/');
   if (!rest || rest === 'index.html') return { ok: true, rel: '', websocket: false };
   if (rest === 'ws') return { ok: true, rel: 'ws', websocket: true };
@@ -185,6 +191,10 @@ function base64(bytes: Uint8Array): string {
 
 export function wsAcceptKey(clientKey: string): string {
   return base64(sha1Bytes(utf8Encode(`${clientKey}${WS_GUID}`)));
+}
+
+export function redirectResponse(location: string): Uint8Array {
+  return httpBytes(302, 'Found', { location, 'content-type': 'text/plain; charset=utf-8' }, utf8Encode(''));
 }
 
 export function httpBytes(status: number, reason: string, headers: Record<string, string>, body: Uint8Array): Uint8Array {

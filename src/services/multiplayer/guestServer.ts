@@ -12,6 +12,7 @@ import {
   httpBytes,
   injectGuestDocument,
   parseHttpHead,
+  redirectResponse,
   resolveGuestPath,
   upgradeResponse,
   utf8Encode,
@@ -122,6 +123,11 @@ function bindHttp(
       const target = resolveGuestPath(head.target, opts.token);
       if (!target.ok) {
         conn.send(textResponse(target.status, target.message));
+        fail();
+        return;
+      }
+      if (target.redirect) {
+        conn.send(redirectResponse(target.redirect));
         fail();
         return;
       }
