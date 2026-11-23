@@ -6,8 +6,8 @@ import { decodeJoinUrl } from '../services/multiplayer/qr';
 import type { MpUiState } from '../services/multiplayer/session';
 import { encodeWifiQr } from '../services/multiplayer/guestHttp';
 import { getInviteDraft, setInviteDraft, type InviteDraft } from '../services/multiplayer/invite';
-import { loadWifiPassword, rememberWifiPassword } from '../services/multiplayer/wifiMemory';
-import { openTetherSettings, readWifiLabel, startHotspot } from '../services/multiplayer/lanShare';
+import { rememberWifiPassword } from '../services/multiplayer/wifiMemory';
+import { openTetherSettings, openWifiSettings, startHotspot } from '../services/multiplayer/lanShare';
 import { useContainerTheme } from '../theme/containerTheme';
 
 interface MultiplayerOverlayProps {
@@ -25,7 +25,7 @@ export function MultiplayerOverlay({ state, onDone, onEnd, onScanned, onCancel, 
   const [permission, requestPermission] = useCameraPermissions();
   const [scanHint, setScanHint] = useState('');
   const saved = getInviteDraft();
-  const [step, setStep] = useState<'choose' | 'wlan' | 'hotspot' | 'codes'>(saved ? 'codes' : 'wlan');
+  const [step, setStep] = useState<'choose' | 'wlan' | 'hotspot' | 'codes'>(saved?.link === 'hotspot' && saved.ssid ? 'codes' : 'wlan');
   const [ssid, setSsid] = useState(saved?.ssid || '');
   const [password, setPassword] = useState(saved?.password || '');
   const [remember, setRemember] = useState(false);
@@ -38,35 +38,17 @@ export function MultiplayerOverlay({ state, onDone, onEnd, onScanned, onCancel, 
   useEffect(() => {
     if (state?.mode !== 'host' || !state.qrFocus) return;
     const draft = getInviteDraft();
-    if (state.qrFocus === 'wifi') {
-      setLink('wlan');
-      setStep(draft?.ssid ? 'codes' : 'wlan');
-    } else if (state.qrFocus === 'hotspot') {
+    if (state.qrFocus === 'hotspot') {
       setLink('hotspot');
-      setStep(draft?.ssid ? 'codes' : 'hotspot');
-    } else if (state.qrFocus === 'game') {
-      setStep(draft?.ssid ? 'codes' : 'wlan');
+      setStep(draft?.link === 'hotspot' && draft.ssid ? 'codes' : 'hotspot');
+    } else if (state.qrFocus === 'game' && draft?.link === 'hotspot' && draft.ssid) {
+      setLink('hotspot');
+      setStep('codes');
     } else {
-      setStep(draft?.ssid ? 'codes' : 'wlan');
+      setLink('wlan');
+      setStep('wlan');
     }
   }, [state?.mode, state?.qrFocus, state?.roomCode]);
-
-  useEffect(() => {
-    if (state?.mode !== 'host' || step !== 'wlan') return undefined;
-    let cancel = false;
-    void readWifiLabel().then(async (info) => {
-      if (cancel) return;
-      if (info.ssid) setSsid((current) => current || info.ssid);
-      if (info.detail) setDetail(info.detail);
-      if (!info.ssid) return;
-      const stored = await loadWifiPassword(info.ssid);
-      if (!cancel && stored) {
-        setPassword((current) => current || stored);
-        setRemember(true);
-      }
-    });
-    return () => { cancel = true; };
-  }, [state?.mode, step]);
 
   if (!state) return null;
 
@@ -137,7 +119,7 @@ export function MultiplayerOverlay({ state, onDone, onEnd, onScanned, onCancel, 
   const guests = state.connectedGuests || 0;
   const chip = link === 'hotspot'
     ? (ssid ? `Hotspot an${guests ? ` · ${guests} verbunden` : ''}` : 'Hotspot aus')
-    : (ssid ? `WLAN · ${ssid}` : 'WLAN wählen');
+    : 'Gleiches WLAN';
 
   return (
     <View style={[styles.screen, { backgroundColor: tokens.bg }]}>
@@ -164,7 +146,7 @@ export function MultiplayerOverlay({ state, onDone, onEnd, onScanned, onCancel, 
         <Text style={[styles.sub, { color: tokens.muted }]}>{state.roomCode}</Text>
         {state.batteryWarning ? <Text style={styles.warn}>{state.batteryWarning}</Text> : null}
         <View style={[styles.segment, { backgroundColor: tokens.card }]}>
-          <TouchableOpacity style={[styles.segmentItem, link === 'wlan' ? { backgroundColor: tokens.lime } : null]} onPress={() => { setLink('wlan'); setStep(getInviteDraft()?.link === 'wlan' && ssid ? 'codes' : 'wlan'); }}>
+          <TouchableOpacity style={[styles.segmentItem, link === 'wlan' ? { backgroundColor: tokens.lime } : null]} onPress={() => { setLink('wlan'); setStep('wlan'); }}>
             <Text style={[styles.segmentText, { color: link === 'wlan' ? tokens.ink : tokens.muted }]}>WLAN</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.segmentItem, link === 'hotspot' ? { backgroundColor: tokens.lime } : null]} onPress={() => { setLink('hotspot'); setStep(getInviteDraft()?.link === 'hotspot' && ssid ? 'codes' : 'hotspot'); }}>
@@ -172,10 +154,32 @@ export function MultiplayerOverlay({ state, onDone, onEnd, onScanned, onCancel, 
           </TouchableOpacity>
         </View>
         <View style={[styles.chip, { backgroundColor: tokens.card }]}>
-          <View style={[styles.chipDot, { backgroundColor: ssid ? tokens.lime : tokens.muted }]} />
+          <View style={[styles.chipDot, { backgroundColor: link === 'wlan' || ssid ? tokens.lime : tokens.muted }]} />
           <Text style={[styles.chipText, { color: tokens.text }]}>{chip}</Text>
         </View>
-        {ready ? (
+        {link === 'wlan' ? (
+          <>
+            <Text style={[styles.hint, { color: tokens.muted }]}>Stellt sicher, dass ihr im selben WLAN seid</Text>
+            <TouchableOpacity style={[styles.primary, { backgroundColor: tokens.lime }]} onPress={() => { void openWifiSettings(); }}>
+              <Text style={[styles.primaryText, { color: tokens.ink }]}>WLAN teilen</Text>
+            </TouchableOpacity>
+            <View style={styles.stepRow}>
+              <View style={[styles.stepBadge, { backgroundColor: tokens.lime }]}><Text style={[styles.stepNum, { color: tokens.ink }]}>1</Text></View>
+              <Text style={[styles.stepTitle, { color: tokens.text }]}>Spiel öffnen</Text>
+            </View>
+            <View style={[styles.gameCard, { backgroundColor: tokens.card }]}>
+              {state.gameUrl ? <QrBlock payload={state.gameUrl} size={220} /> : <Text style={[styles.gameText, { color: tokens.muted }]}>Der Browser-Server braucht einen Build mit TCP.</Text>}
+              <Text style={[styles.gameText, { color: tokens.text }]}>Scanne den Code mit der normalen Kamera. Du brauchst OpenScr nicht.</Text>
+            </View>
+            <TouchableOpacity onPress={() => setShowAppQr((value) => !value)}>
+              <Text style={[styles.quiet, { color: tokens.muted }]}>{showAppQr ? 'App-Code ausblenden' : 'Code für die OpenScr-App'}</Text>
+            </TouchableOpacity>
+            {showAppQr && state.qrPayload ? <QrBlock payload={state.qrPayload} size={140} /> : null}
+            <TouchableOpacity style={[styles.primary, { backgroundColor: tokens.lime }]} onPress={onDone}>
+              <Text style={[styles.primaryText, { color: tokens.ink }]}>Spiel starten</Text>
+            </TouchableOpacity>
+          </>
+        ) : ready ? (
           <>
             <View style={styles.stepRow}>
               <View style={[styles.stepBadge, { backgroundColor: tokens.lime }]}><Text style={[styles.stepNum, { color: tokens.ink }]}>1</Text></View>
@@ -200,7 +204,7 @@ export function MultiplayerOverlay({ state, onDone, onEnd, onScanned, onCancel, 
               <Text style={[styles.primaryText, { color: tokens.ink }]}>Spiel starten</Text>
             </TouchableOpacity>
           </>
-        ) : link === 'hotspot' ? (
+        ) : (
           <>
             <Text style={[styles.hint, { color: tokens.muted }]}>Der Hotspot dieses Handys. Wenn Android die Zugangsdaten nicht herausgibt, tippst du sie ab.</Text>
             <TouchableOpacity
@@ -230,18 +234,6 @@ export function MultiplayerOverlay({ state, onDone, onEnd, onScanned, onCancel, 
               <Text style={[styles.hint, { color: tokens.muted }]}>{remember ? '☑' : '☐'} Passwort auf diesem Gerät merken</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.primary, { backgroundColor: tokens.lime, opacity: !ssid.trim() || !password ? 0.4 : 1 }]} onPress={() => finish('hotspot')} disabled={!ssid.trim() || !password}>
-              <Text style={[styles.primaryText, { color: tokens.ink }]}>QR-Codes zeigen</Text>
-            </TouchableOpacity>
-          </>
-        ) : (
-          <>
-            <Text style={[styles.hint, { color: tokens.muted }]}>{detail || 'Dieses Handy ist in diesem WLAN.'}</Text>
-            <TextInput style={[styles.input, { backgroundColor: tokens.card, color: tokens.text }]} value={ssid} onChangeText={setSsid} placeholder="WLAN-Name" placeholderTextColor={tokens.muted} autoCapitalize="none" />
-            <TextInput style={[styles.input, { backgroundColor: tokens.card, color: tokens.text }]} value={password} onChangeText={setPassword} placeholder="WLAN-Passwort" placeholderTextColor={tokens.muted} autoCapitalize="none" secureTextEntry />
-            <TouchableOpacity onPress={() => setRemember((value) => !value)}>
-              <Text style={[styles.hint, { color: tokens.muted }]}>{remember ? '☑' : '☐'} Passwort auf diesem Gerät merken</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.primary, { backgroundColor: tokens.lime, opacity: !ssid.trim() || !password ? 0.4 : 1 }]} onPress={() => finish('wlan')} disabled={!ssid.trim() || !password}>
               <Text style={[styles.primaryText, { color: tokens.ink }]}>QR-Codes zeigen</Text>
             </TouchableOpacity>
           </>
