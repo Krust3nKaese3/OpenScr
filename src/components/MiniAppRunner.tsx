@@ -11,6 +11,7 @@ import { MiniApp, Permission } from '../types';
 import { NavGlyph, ScrappGlyph } from './ScrappGlyph';
 import { useContainerTheme } from '../theme/containerTheme';
 import { SCROLLBAR_CSS } from '../theme/scrollbar';
+import { ROSTER_LOBBY_SOURCE } from '../shared/rosterLobbySource';
 import { isPermission } from '../bridge/permissionInfo';
 import { StorageService } from '../services/StorageService';
 import { PermissionRequestModal } from './PermissionRequestModal';
@@ -330,7 +331,7 @@ const MiniAppRunnerBase: React.FC<MiniAppRunnerProps> = ({ app, onClose, onLeave
           </style>
         </head>
         <body>
-          <script>${webBridge}${bridgeScript}
+          <script>${webBridge}${ROSTER_LOBBY_SOURCE}${bridgeScript}
           ${assetRuntimeSource(host)}
           ${hashLine}</script>
           ${rewritten}
