@@ -35,9 +35,11 @@ HTTP: `http.request`, `http.fetch` (nur `http:` und `https:`)
 
 Bluetooth: `bluetooth.scan`, `bluetooth.connect`, `bluetooth.disconnect`, `bluetooth.getConnectedDevices`
 
-Benachrichtigungen: `notifications.schedule`
+Benachrichtigungen: `notifications.schedule` (fragt die Systemberechtigung, setzt den Namen der OpenScrapp vor den Titel, merkt die Kennung; Löschen der OpenScrapp entfernt ihre geplanten Meldungen)
 
-Kamera: `camera.takePicture`
+Kamera: `camera.takePicture`, `camera.scanQr` (Vollbild-Vorschau mit Auslösen oder Abbrechen; Rückgabe ist eine JPEG-Daten-URI bzw. der gelesene Text; nichts geht in die Fotomediathek; kein Mikrofon)
+
+Teilen: `share.text`, `share.exportFile` (Text über das Teilen-Menü; eine Datei nur in den App-Cache, danach das Teilen-Menü, damit sie zum Beispiel in „Dateien“ landet. Kein allgemeiner Dateizugriff.)
 
 Sensoren: `sensors.getAccelerometer`, `sensors.getGyroscope`
 
@@ -61,7 +63,7 @@ Kryptografie: `crypto.isAvailable`, `crypto.aesEcb`, `crypto.aesGcm`, `crypto.hm
 
 BLE: `ble.isAvailable`, `ble.scan`, `ble.connect`, `ble.disconnect`, `ble.write`, `ble.read`, `ble.notify`
 
-Zwischenablage: `clipboard.setString`, `clipboard.getString`
+Zwischenablage: `clipboard.setString`, `clipboard.getString` (Zustimmung pro OpenScrapp, danach die Systemzwischenablage)
 
 Bildschirm: `OpenScrBridge.keepAwake.acquire()` / `OpenScrBridge.keepAwake.release()`. `acquire` hält wach, `release` gibt frei. Dieselbe Wirkung hat `screen.keepAwake(true|false)` (`true` oder ohne Argument hält wach). Die Kategorie `screen` braucht keine Zustimmung und keinen Eintrag in `openscr.json`. Sie schaltet nur den Schlaf des Bildschirms aus. Fehlt `expo-keep-awake` im Build, antwortet der Aufruf auf Deutsch, dass ein neuer Entwicklungs-Build fehlt. Im Browser-Gast sind `OpenScrBridge.keepAwake.acquire()` und `OpenScrBridge.keepAwake.release()` da und tun nichts, weil der Gast nicht den Bildschirm des Hosts hält.
 
@@ -73,9 +75,9 @@ Events (nur diese Namen): `app.start`, `bluetooth.connected`, `bluetooth.disconn
 
 Auf iOS ist die Bridge kürzer. Die Auswahl steht in `src/services/iosPolicy.ts` und hängt an der Plattform des Builds. Eine ferne Datei kann sie nicht erweitern.
 
-Erlaubt: `storage.get`, `storage.set`, `storage.remove`, `http.request`, `http.fetch`, `sensors.getAccelerometer`, `sensors.getGyroscope`, `ble.isAvailable`, `ble.scan`, `ble.connect`, `ble.disconnect`, `ble.write`, `ble.read`, `ble.notify`, `vibration.vibrate`, `screen.keepAwake`, dazu das Event `app.start`.
+Erlaubt: `storage.get`, `storage.set`, `storage.remove`, `http.request`, `http.fetch`, `sensors.getAccelerometer`, `sensors.getGyroscope`, `ble.isAvailable`, `ble.scan`, `ble.connect`, `ble.disconnect`, `ble.write`, `ble.read`, `ble.notify`, `vibration.vibrate`, `screen.keepAwake`, `clipboard.setString`, `clipboard.getString`, `share.text`, `share.exportFile`, `camera.takePicture`, `camera.scanQr`, `notifications.schedule`, dazu das Event `app.start`.
 
-Nicht verfügbar, mit der Meldung „Diese Funktion ist auf iOS nicht verfügbar…“: Roh-Sockets und Tuya (`net.*`), Hintergrundaufgaben und Makros (`background.*`), Kacheln (`tiles.*`), Popups (`popup.*`), klassisches Bluetooth, Benachrichtigungen, Kamera, Spotify, Medientasten, WLAN-Info, Zwischenablage, Geheimnisse, Kryptografie und Mehrspieler. Android behält die volle Liste oben.
+Nicht verfügbar, mit der Meldung „Diese Funktion ist auf iOS nicht verfügbar…“: Roh-Sockets und Tuya (`net.*`), Hintergrundaufgaben und Makros (`background.*`), Kacheln (`tiles.*`), Popups (`popup.*`), klassisches Bluetooth, Spotify, Medientasten, WLAN-Info, Geheimnisse, Kryptografie, Mehrspieler und die Fotomediathek. Es gibt kein `expo-image-picker` und kein `expo-media-library`. Android behält die volle Liste oben, einschließlich der neuen Teilen- und Kamera-Methoden.
 
 ## Melden
 

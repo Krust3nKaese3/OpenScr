@@ -103,7 +103,11 @@ test('iOS will not open a catalog install just because the remote list contains 
 });
 
 test('iOS bridge allows the learning set and rejects sockets, macros, tiles and popups', () => {
-  for (const method of ['storage.set', 'http.fetch', 'http.request', 'sensors.getAccelerometer', 'ble.scan', 'vibration.vibrate']) {
+  for (const method of [
+    'storage.set', 'http.fetch', 'http.request', 'sensors.getAccelerometer', 'ble.scan', 'vibration.vibrate',
+    'clipboard.setString', 'clipboard.getString', 'share.text', 'share.exportFile',
+    'camera.takePicture', 'camera.scanQr', 'notifications.schedule',
+  ]) {
     assert.strictEqual(assessBridgeCall('ios', method), null, method);
     assert.strictEqual(assessBridgeCall('android', method), null, method);
   }
@@ -115,7 +119,6 @@ test('iOS bridge allows the learning set and rejects sockets, macros, tiles and 
     'tiles.set',
     'popup.open',
     'bluetooth.scan',
-    'notifications.schedule',
     'multiplayer.host',
   ]) {
     const message = assessBridgeCall('ios', method);
@@ -153,12 +156,27 @@ test('source view keeps entry HTML and JS and the code pane stays at most 80 per
   assert.match(runner, /maxHeight: '80%'/);
   const home = fs.readFileSync(path.join(root, 'src/screens/HomeScreen.tsx'), 'utf8');
   assert.match(home, /showCatalog \?/);
-  assert.match(home, /Dein erstes OpenScrapp/);
+  assert.match(home, /Deine erste OpenScrapp/);
   assert.match(home, /Debug-Log/);
   assert.match(home, /Platform\.OS !== 'ios'[\s\S]{0,400}toolbarButtonText\}>Spotify/);
   assert.match(home, /Platform\.OS !== 'ios'[\s\S]{0,250}<SpotifySettingsModal/);
   const appJson = JSON.parse(fs.readFileSync(path.join(root, 'app.json'), 'utf8'));
   assert.strictEqual(appJson.expo.ios.buildNumber, '3');
+  const plugins = JSON.stringify(appJson.expo.plugins);
+  assert.ok(plugins.indexOf('withoutIosPush') < plugins.indexOf('expo-notifications'));
+  assert.ok(plugins.indexOf('withIosCameraPurpose') < plugins.indexOf('expo-camera'));
+  assert.doesNotMatch(plugins, /image-picker|media-library/);
+  const pkg = fs.readFileSync(path.join(root, 'package.json'), 'utf8');
+  assert.doesNotMatch(pkg, /expo-image-picker|expo-media-library/);
+  const { notificationTitle, notificationOwnedByApp } = require('../src/services/scrappNotify.ts');
+  const { safeExportFileName } = require('../src/services/shareExport.ts');
+  assert.strictEqual(notificationTitle('Würfel', 'Hallo'), 'Würfel: Hallo');
+  assert.ok(notificationOwnedByApp({ openscrAppId: 'a' }, 'a'));
+  assert.strictEqual(notificationOwnedByApp({ openscrAppId: 'b' }, 'a'), false);
+  assert.strictEqual(safeExportFileName('notes.txt'), 'notes.txt');
+  assert.strictEqual(safeExportFileName('../secret.txt'), 'secret.txt');
+  assert.throws(() => safeExportFileName('..'), /ungültig/);
+  assert.ok(IOS_CAPABILITY_ERROR.includes('Zwischenablage'));
   const handler = fs.readFileSync(path.join(root, 'src/bridge/BridgeMessageHandler.ts'), 'utf8');
   assert.match(handler, /iosBlockedCapability\(Platform\.OS/);
   const tasks = fs.readFileSync(path.join(root, 'src/services/BackgroundTasks.ts'), 'utf8');

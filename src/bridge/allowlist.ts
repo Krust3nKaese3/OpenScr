@@ -300,7 +300,8 @@ const BRIDGE_METHODS: Record<string, MethodSpec> = {
     validate: (a) => (exact(a, 3, 3), [str(a[0], 'Titel', 180), str(a[1], 'Text', 500), num(a[2], 'Sekunden', 0, 7 * 24 * 3600)]),
   }),
 
-  'camera.takePicture': method({ category: 'camera', action: 'takePicture', validate: none }),
+  'camera.takePicture': method({ category: 'camera', action: 'takePicture', rate: SCAN_RATE, validate: none }),
+  'camera.scanQr': method({ category: 'camera', action: 'scanQr', rate: SCAN_RATE, validate: none }),
   'sensors.getAccelerometer': method({ category: 'sensors', action: 'getAccelerometer', rate: SENSOR_RATE, validate: none }),
   'sensors.getGyroscope': method({ category: 'sensors', action: 'getGyroscope', rate: SENSOR_RATE, validate: none }),
   'vibration.vibrate': method({
@@ -404,6 +405,13 @@ const BRIDGE_METHODS: Record<string, MethodSpec> = {
 
   'clipboard.setString': method({ category: 'clipboard', action: 'setString', validate: (a) => (exact(a, 1, 1), [str(a[0], 'Text', 64_000)]) }),
   'clipboard.getString': method({ category: 'clipboard', action: 'getString', validate: none }),
+
+  'share.text': method({ category: 'share', action: 'text', validate: (a) => (exact(a, 1, 1), [str(a[0], 'Text', 64_000)]) }),
+  'share.exportFile': method({
+    category: 'share',
+    action: 'exportFile',
+    validate: (a) => (exact(a, 2, 3), [str(a[0], 'Dateiname', 80), str(a[1], 'Inhalt', 1_000_000), optStr(a[2], 'MIME-Typ', 100)]),
+  }),
 
   'multiplayer.host': method({ category: 'multiplayer', action: 'host', rate: MP_ROOM_RATE, validate: multiplayerHost }),
   'multiplayer.join': method({ category: 'multiplayer', action: 'join', rate: MP_ROOM_RATE, validate: multiplayerJoin }),

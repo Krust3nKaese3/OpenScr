@@ -1,6 +1,6 @@
 # Datenschutzerklärung für OpenScr
 
-Stand: 17. November 2026
+Stand: 24. November 2026
 
 **Entwurf, keine Rechtsberatung.** Den Text vor der Veröffentlichung rechtlich prüfen lassen. Altersangaben im Katalog sind Empfehlungen des Anbieters, keine behördliche Kennzeichnung.
 
@@ -54,7 +54,7 @@ Spotify, Speicher, Mehrspieler und jede andere Brücken-Funktion brauchen eine e
 
 Die Einstellung „Über dem Sperrbildschirm anzeigen“ gilt pro OpenScrapp und ist aus, bis du sie einschaltest. Eingeschaltet zeigt Android nur die gerade geöffnete OpenScrapp über der Gerätesperre, ohne die PIN. Der Bildschirm darf dabei ausgehen. Katalog, Einstellungen und andere Bildschirme von OpenScr bleiben hinter der Sperre. Dieselbe Einstellung legt eine Benachrichtigung auf das Gerät, die auf dem Sperrbildschirm den Namen der OpenScrapp zeigt. Tippen öffnet nur diese OpenScrapp. Die Meldung lässt sich wegwischen und wird gelöscht, wenn du die Einstellung ausschaltest. Die Einstellung bleibt auf dem Gerät.
 
-Die Brücke gibt kein Dateisystem, keine Kontakte und keine GPS-Koordinaten frei. Die Kamera dient dem Lesen von QR-Codes (OpenScrapp installieren oder einem Spielraum beitreten). OpenScr speichert dabei kein Foto. Ein Mikrofon wird nicht verwendet.
+Die Brücke gibt kein allgemeines Dateisystem, keine Kontakte, keine Fotomediathek und keine GPS-Koordinaten frei. Die Kamera liest einen QR-Code, wenn du eine eigene OpenScrapp installierst, und sie öffnet sich, wenn eine OpenScrapp, die du selbst geschrieben hast, ein Foto oder einen QR-Code anfordert. Das Foto bleibt eine Daten-URI in dieser OpenScrapp. OpenScr speichert es nicht in der Fotomediathek. Ein Mikrofon wird nicht verwendet. Nach Zustimmung darf diese OpenScrapp Text in die Zwischenablage legen oder daraus lesen. Eine Datei schreibt sie nur in den Cache von OpenScr und öffnet dann das Teilen-Menü, damit du sie zum Beispiel in „Dateien“ sichern kannst. Lokale Benachrichtigungen tragen den Namen der OpenScrapp. Beim Löschen werden ihre geplanten Benachrichtigungen entfernt.
 
 OpenScr fordert keine Standortberechtigung an. `ACCESS_FINE_LOCATION` und `ACCESS_BACKGROUND_LOCATION` sind nicht Teil dieses Release. GPS-Koordinaten werden nicht gelesen. Den WLAN-Namen gibt Android auf aktuellen Versionen ohne diese Berechtigung nicht heraus; dann bleibt er verborgen. Bluetooth-Suche ist nicht dazu da, einen Standort abzuleiten (`neverForLocation`).
 
@@ -64,7 +64,7 @@ Ein Vordergrunddienst mit sichtbarer Benachrichtigung („OpenScr aktiv“) läu
 
 Auf Android zeigt „Empfohlen“ OpenScrapps aus dem Katalog (Name, Repository, Beschreibung, Altersangabe). Eine Sperrliste kann eine OpenScrapp für alle Installationen deaktivieren; die App zeigt dann den Grund und startet sie nicht. Es gibt keine zusätzliche Nutzerdatenbank dafür. Die iOS-Version hat diese Liste nicht. Dort meldest du dich mit deinem GitHub-Konto an und lädst nur Repositories, deren Besitzer dieses Konto ist. Abmelden löscht das Token und schaltet diese OpenScrapps aus. Eine ferne Katalogdatei schaltet den Katalog auf iOS nicht ein.
 
-Auf iOS kann eine OpenScrapp nur Speicher, Sensoren, HTTP, Bluetooth LE, Vibration und Bildschirm wachhalten nutzen. Eine Android-Build-Einstellung `EXPO_PUBLIC_CATALOG_ONLY` schaltet freie GitHub-Links ab und behält den Katalog plus den Entwicklermodus. Builds ohne diese Einstellung behalten die freie Installation mit Warnung. Der Play-Build lässt die Einstellung aus.
+Auf iOS kann eine OpenScrapp Speicher, Sensoren, HTTP, Bluetooth LE, Vibration, Bildschirm wachhalten, Zwischenablage, Teilen, Kamera und lokale Benachrichtigungen nutzen. Fotomediathek, Mikrofon und Push gibt es dort nicht. Eine Android-Build-Einstellung `EXPO_PUBLIC_CATALOG_ONLY` schaltet freie GitHub-Links ab und behält den Katalog plus den Entwicklermodus. Builds ohne diese Einstellung behalten die freie Installation mit Warnung. Der Play-Build lässt die Einstellung aus.
 
 ## Rechtsgrundlagen
 

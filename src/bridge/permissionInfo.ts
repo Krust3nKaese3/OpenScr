@@ -15,11 +15,11 @@ export const PERMISSION_INFO: Record<Permission, { title: string; description: s
   },
   notifications: {
     title: 'Benachrichtigungen',
-    description: 'Lokale Benachrichtigungen anzeigen',
+    description: 'Lokale Benachrichtigungen anzeigen. Der Titel beginnt mit dem Namen dieser OpenScrapp',
   },
   camera: {
     title: 'Kamera',
-    description: 'Die Kamera verwenden',
+    description: 'Ein Foto aufnehmen oder einen QR-Code scannen. Nichts landet in der Fotomediathek. Kein Mikrofon',
   },
   sensors: {
     title: 'Sensoren',
@@ -55,7 +55,11 @@ export const PERMISSION_INFO: Record<Permission, { title: string; description: s
   },
   clipboard: {
     title: 'Zwischenablage',
-    description: 'Text in die Zwischenablage legen oder daraus lesen',
+    description: 'Text in die Zwischenablage legen oder daraus lesen. Gilt nur für diese OpenScrapp',
+  },
+  share: {
+    title: 'Teilen',
+    description: 'Text teilen oder eine Datei über das Teilen-Menü sichern. Kein Zugriff auf den übrigen Speicher',
   },
   network: {
     title: 'WLAN-Info',
