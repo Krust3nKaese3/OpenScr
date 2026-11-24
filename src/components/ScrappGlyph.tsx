@@ -21,8 +21,8 @@ const SCRAPP_ICONS = {
 } as const;
 
 /** Outline icons from the same set as the navigation bar. */
-export function ScrappGlyph({ name, color }: { name: string; color: string; card?: string }) {
-  return <Ionicons name={SCRAPP_ICONS[kindFor(name)]} size={26} color={color} />;
+export function ScrappGlyph({ name, color, size = 26 }: { name: string; color: string; card?: string; size?: number }) {
+  return <Ionicons name={SCRAPP_ICONS[kindFor(name)]} size={size} color={color} />;
 }
 
 const NAV_ICONS = {

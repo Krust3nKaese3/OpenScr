@@ -8,6 +8,8 @@ import { devFolderFor, listDevFiles, readDevAsset } from '../services/devFolder'
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Clipboard from 'expo-clipboard';
 import { MiniApp, Permission } from '../types';
+import { NavGlyph, ScrappGlyph } from './ScrappGlyph';
+import { useContainerTheme } from '../theme/containerTheme';
 import { isPermission } from '../bridge/permissionInfo';
 import { StorageService } from '../services/StorageService';
 import { PermissionRequestModal } from './PermissionRequestModal';
@@ -40,9 +42,12 @@ import {
 interface MiniAppRunnerProps {
   app: MiniApp;
   onClose: () => void;
+  onLeave?: (tab: 'home' | 'add' | 'settings') => void;
 }
 
-const MiniAppRunnerBase: React.FC<MiniAppRunnerProps> = ({ app, onClose }) => {
+const MiniAppRunnerBase: React.FC<MiniAppRunnerProps> = ({ app, onClose, onLeave }) => {
+  const tokens = useContainerTheme();
+  const [shellPage, setShellPage] = useState<'index' | 'qr' | 'options'>('index');
   const webViewRef = useRef<{ injectJavaScript: (js: string) => void } | null>(null);
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   if (Platform.OS === 'web') {
@@ -71,10 +76,18 @@ const MiniAppRunnerBase: React.FC<MiniAppRunnerProps> = ({ app, onClose }) => {
   // One-shot height. A live window subscription would re-render when the keyboard opens.
   const panes = learningPaneHeights(Dimensions.get('window').height);
   const htmlSource = useRef<{ html: string } | null>(null);
-  const leaveScrapp = () => {
-    applyShowOverLock(false);
-    onClose();
+  const openShellPage = (page: 'index' | 'qr' | 'options') => {
+    setShellPage(page);
+    webViewRef.current?.injectJavaScript(
+      `window.dispatchEvent(new CustomEvent('openscr-shell',{detail:${JSON.stringify(page)}})); true;`
+    );
   };
+  const leaveTo = (tab: 'home' | 'add' | 'settings') => {
+    applyShowOverLock(false);
+    if (onLeave) onLeave(tab);
+    else onClose();
+  };
+  const leaveScrapp = () => leaveTo('home');
 
   useLayoutEffect(() => {
     let live = true;
@@ -372,6 +385,11 @@ const MiniAppRunnerBase: React.FC<MiniAppRunnerProps> = ({ app, onClose }) => {
     try {
       const message = JSON.parse(event.nativeEvent.data);
 
+      if (message?.type === 'shell-page' && (message.page === 'index' || message.page === 'qr' || message.page === 'options')) {
+        setShellPage(message.page);
+        return;
+      }
+
       if (message?.type === 'navigate' && typeof message.url === 'string') {
         await navigateLocal(message.url);
         return;
@@ -494,7 +512,7 @@ const MiniAppRunnerBase: React.FC<MiniAppRunnerProps> = ({ app, onClose }) => {
           </View>
         </View>
       ) : null}
-      <View style={codePane}>
+      <View style={[codePane, learning ? null : styles.scrappStage]}>
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#2196F3" />
@@ -545,13 +563,34 @@ const MiniAppRunnerBase: React.FC<MiniAppRunnerProps> = ({ app, onClose }) => {
       )}
 
       {learning ? null : (
-      <TouchableOpacity
-        onPress={leaveScrapp}
-        style={{ position: 'absolute', top: 8, right: 8, width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-      >
-        <Text style={{ color: 'white', fontSize: 18, fontWeight: '700' }}>✕</Text>
-      </TouchableOpacity>
+        <View style={styles.navWrap} pointerEvents="box-none">
+          <View style={styles.navRow}>
+            <View style={[styles.navPill, { backgroundColor: tokens.nav, borderColor: tokens.line }]}>
+              <TouchableOpacity style={styles.navItem} onPress={() => leaveTo('home')} accessibilityLabel="Start">
+                <NavGlyph name="home" color={tokens.muted} />
+                <View style={[styles.navUnderline, { backgroundColor: 'transparent' }]} />
+              </TouchableOpacity>
+            </View>
+            <View style={[styles.navPill, styles.subPill, { backgroundColor: tokens.nav, borderColor: tokens.line }]}>
+              {([
+                ['index', app.manifest.name, 'app'],
+                ['qr', 'QR-Code', 'qr'],
+                ['options', 'Optionen', 'settings'],
+              ] as const).map(([id, label, glyph]) => {
+                const active = shellPage === id;
+                const color = active ? tokens.lime : tokens.muted;
+                return (
+                  <TouchableOpacity key={id} style={styles.navItem} onPress={() => openShellPage(id)} accessibilityLabel={label}>
+                    {glyph === 'app'
+                      ? <ScrappGlyph name={app.manifest.name} color={color} size={22} />
+                      : <NavGlyph name={glyph} color={color} />}
+                    <View style={[styles.navUnderline, { backgroundColor: active ? tokens.lime : 'transparent' }]} />
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        </View>
       )}
       {Platform.OS === 'android' && hostPresence && !mpUi ? (
         <TouchableOpacity
@@ -625,12 +664,23 @@ async function readMiniAppAsset(appId: string, localPath: string, rel: string): 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: '#0B0B0F',
   },
   webview: {
     flex: 1,
     backgroundColor: 'transparent',
   },
+  scrappStage: {
+    flex: 1,
+    paddingBottom: 92,
+    backgroundColor: '#0B0B0F',
+  },
+  navWrap: { position: 'absolute', left: 0, right: 0, bottom: 22, alignItems: 'center', zIndex: 20 },
+  navRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  navPill: { flexDirection: 'row', borderRadius: 28, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 10, justifyContent: 'space-between' },
+  subPill: { borderWidth: 1, paddingHorizontal: 8 },
+  navItem: { width: 56, alignItems: 'center', paddingVertical: 4 },
+  navUnderline: { marginTop: 6, height: 2, width: 18, borderRadius: 1 },
   devBar: {
     backgroundColor: '#0d47a1',
     paddingHorizontal: 12,

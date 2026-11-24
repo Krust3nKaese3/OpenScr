@@ -621,7 +621,7 @@ export const HomeScreen: React.FC = () => {
   return (
     <View style={[styles.container, { backgroundColor: tokens.bg }]}>
       {selectedApp ? (
-        <MiniAppRunner key={selectedApp.id} app={selectedApp} onClose={closeSelectedApp} />
+        <MiniAppRunner key={selectedApp.id} app={selectedApp} onClose={closeSelectedApp} onLeave={(next) => { setScanning(false); setTab(next); closeSelectedApp(); }} />
       ) : (
         <>
           <View style={styles.header}>
