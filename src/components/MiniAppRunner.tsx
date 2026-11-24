@@ -10,6 +10,7 @@ import * as Clipboard from 'expo-clipboard';
 import { MiniApp, Permission } from '../types';
 import { NavGlyph, ScrappGlyph } from './ScrappGlyph';
 import { useContainerTheme } from '../theme/containerTheme';
+import { SCROLLBAR_CSS } from '../theme/scrollbar';
 import { isPermission } from '../bridge/permissionInfo';
 import { StorageService } from '../services/StorageService';
 import { PermissionRequestModal } from './PermissionRequestModal';
@@ -325,6 +326,7 @@ const MiniAppRunnerBase: React.FC<MiniAppRunnerProps> = ({ app, onClose, onLeave
             html, body { margin: 0; padding: 0; height: 100%; }
             html { overflow-x: hidden; }
             * { -webkit-tap-highlight-color: transparent; }
+            ${SCROLLBAR_CSS}
           </style>
         </head>
         <body>

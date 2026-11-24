@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { appearanceMode, useContainerTheme } from './src/theme/containerTheme';
+import { installScrollbarStyle } from './src/theme/scrollbar';
 import { initBackgroundTasks } from './src/services/BackgroundTasks';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
@@ -14,6 +15,7 @@ function Shell() {
     document.documentElement.style.backgroundColor = tokens.bg;
     document.body.style.backgroundColor = tokens.bg;
     document.body.style.margin = '0';
+    installScrollbarStyle();
   }, [tokens.bg]);
   return (
     <>

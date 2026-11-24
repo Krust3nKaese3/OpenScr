@@ -30,7 +30,14 @@ import { devFolderFor, devFoldersEnabled, setDevFolder } from '../services/devFo
 import { PlayerNamesModal } from '../components/PlayerNamesModal';
 import { PlayerStatsModal } from '../components/PlayerStatsModal';
 
-const DEV_FOLDER_PLACEHOLDER = 'E:\\git_projects\\mobile_apps\\GuessTheSongScrapp';
+const SONG_DEV_FOLDER = 'E:\\git_projects\\mobile_apps\\GuessTheSongScrapp';
+const WOLF_DEV_FOLDER = 'E:\\git_projects\\mobile_apps\\WerwolfScrapp';
+
+function devFolderPlaceholder(app: { manifest?: { name?: string }; repoUrl?: string } | null): string {
+  const blob = `${app?.manifest?.name || ''} ${app?.repoUrl || ''}`.toLowerCase();
+  if (blob.includes('werwolf')) return WOLF_DEV_FOLDER;
+  return SONG_DEV_FOLDER;
+}
 import {
   REPORT_EMAIL,
   blockReasonFor,
@@ -400,7 +407,16 @@ export const HomeScreen: React.FC = () => {
   const [actionApp, setActionApp] = useState<MiniApp | null>(null);
   const [folderDraft, setFolderDraft] = useState('');
   useEffect(() => {
-    setFolderDraft(actionApp ? devFolderFor(actionApp.id) : '');
+    if (!actionApp) {
+      setFolderDraft('');
+      return;
+    }
+    const saved = devFolderFor(actionApp.id);
+    const wanted = devFolderPlaceholder(actionApp);
+    const normalized = saved.replace(/\//g, '\\').toLowerCase();
+    const song = SONG_DEV_FOLDER.toLowerCase();
+    if (!saved || (wanted === WOLF_DEV_FOLDER && normalized === song)) setFolderDraft(wanted);
+    else setFolderDraft(saved);
   }, [actionApp]);
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
 
@@ -895,14 +911,14 @@ export const HomeScreen: React.FC = () => {
                   onChangeText={setFolderDraft}
                   autoCapitalize="none"
                   autoCorrect={false}
-                  placeholder={DEV_FOLDER_PLACEHOLDER}
+                  placeholder={devFolderPlaceholder(actionApp)}
                   placeholderTextColor={tokens.muted}
                   style={[styles.devFolderInput, { color: tokens.text, borderColor: tokens.line, backgroundColor: tokens.bg }]}
                 />
                 <TouchableOpacity
                   style={styles.sheetRow}
                   onPress={() => {
-                    const folder = folderDraft.trim() || DEV_FOLDER_PLACEHOLDER;
+                    const folder = folderDraft.trim() || devFolderPlaceholder(actionApp);
                     setFolderDraft(folder);
                     setDevFolder(actionApp.id, folder);
                     notify('Ordner', 'Die App liest jetzt aus diesem Ordner.');

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { formatPlayer, listPlayers, type PlayerRecord } from '../services/playerRoster';
 import { useContainerTheme } from '../theme/containerTheme';
@@ -56,21 +56,6 @@ export function PlayerStatsModal({ visible, onClose }: { visible: boolean; onClo
   const [role, setRole] = useState<RoleId | null>(null);
   const [sortKey, setSortKey] = useState('wins');
   const [direction, setDirection] = useState<Direction>('desc');
-
-  useEffect(() => {
-    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
-    const id = 'openscr-scroll-style';
-    if (document.getElementById(id)) return;
-    const style = document.createElement('style');
-    style.id = id;
-    style.textContent = [
-      '#openscr-stats-scroll, #openscr-names-scroll { scrollbar-width: thin; scrollbar-color: #3a3a44 transparent; }',
-      '#openscr-stats-scroll::-webkit-scrollbar, #openscr-names-scroll::-webkit-scrollbar { width: 8px; height: 8px; }',
-      '#openscr-stats-scroll::-webkit-scrollbar-thumb, #openscr-names-scroll::-webkit-scrollbar-thumb { background: #3a3a44; border-radius: 8px; }',
-      '#openscr-stats-scroll::-webkit-scrollbar-track, #openscr-names-scroll::-webkit-scrollbar-track { background: transparent; }',
-    ].join('');
-    document.head.appendChild(style);
-  }, []);
 
   useEffect(() => {
     if (!visible) return;
