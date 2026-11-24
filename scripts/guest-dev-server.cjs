@@ -82,6 +82,39 @@ if (global.__openscrGuestDev) {
     socket.on('error', onClose);
   }
 
+  function dirStamp(root) {
+    const files = [];
+    try { walk(root, root, files); } catch { return 'leer'; }
+    return crypto.createHash('sha1').update(files.map((file) => `${file.rel}:${file.mtime}:${file.size}`).join('\n')).digest('hex');
+  }
+
+  function liveHtml(room, token, raw) {
+    let html = raw.toString('utf8');
+    const reload = `<script>(function(){var s='';function tick(){fetch('/g/${token}/openscr-dev-stamp',{cache:'no-store'}).then(function(r){return r.text();}).then(function(n){if(s&&n&&n!==s)location.reload();s=n;}).catch(function(){});}setInterval(tick,500);tick();})();</script>`;
+    if (html.indexOf('openscr-dev-stamp') >= 0) return Buffer.from(html);
+    const extra = (html.indexOf('openscr-guest.js') < 0 ? room.boot : '') + reload;
+    if (/<head[^>]*>/i.test(html)) html = html.replace(/<head[^>]*>/i, (match) => match + extra);
+    else html = `<!DOCTYPE html><html><head>${extra}</head><body>${html}</body></html>`;
+    return Buffer.from(html);
+  }
+
+  function liveFile(room, key, token) {
+    if (!room.root) return null;
+    const full = inside(room.root, key || 'index.html');
+    if (!full) return null;
+    let stat;
+    try { stat = fs.statSync(full); } catch { return null; }
+    if (!stat.isFile()) return null;
+    const ext = path.extname(full).slice(1).toLowerCase();
+    let body = fs.readFileSync(full);
+    let mime = MIME[ext] || 'application/octet-stream';
+    if (!key) {
+      body = liveHtml(room, token, body);
+      mime = 'text/html; charset=utf-8';
+    }
+    return { mime, body };
+  }
+
   function roomOf(token) {
     return rooms.get(token) || null;
   }
@@ -204,9 +237,12 @@ if (global.__openscrGuestDev) {
             });
           }
           const previous = rooms.get(token);
+          const root = safeRoot(body.root);
           rooms.set(token, {
             appId: String(body.appId || ''),
             room: String(body.room || ''),
+            root,
+            boot: String(body.boot || ''),
             files,
             hosts: previous ? previous.hosts : new Set(),
             guests: previous ? previous.guests : new Map(),
@@ -240,13 +276,19 @@ if (global.__openscrGuestDev) {
       return;
     }
     const rel = parts.slice(3).join('/');
+    if (rel === 'openscr-dev-stamp') {
+      res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' });
+      res.end(room.root ? dirStamp(room.root) : 'snap');
+      return;
+    }
     if (rel === 'ws') {
       res.writeHead(426, { 'content-type': 'text/plain' });
       res.end('WebSocket.');
       return;
     }
     const key = !rel || rel === 'index.html' ? '' : rel;
-    const file = room.files.get(key);
+    const live = liveFile(room, key, parts[2]);
+    const file = live || room.files.get(key);
     if (!file) {
       res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
       res.end(`Nicht gefunden: ${rel || '/'}`);

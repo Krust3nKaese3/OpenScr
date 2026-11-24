@@ -113,15 +113,18 @@ export const ROSTER_LOBBY_SOURCE = String.raw`
       if (!seat) { box.appendChild(button); return; }
       var row = document.createElement('div');
       row.className = 'orl-row in';
-      var remove = document.createElement('button');
-      remove.type = 'button';
-      remove.className = 'orl-x';
-      remove.dataset.act = 'drop';
-      remove.dataset.id = seat.id;
-      remove.setAttribute('aria-label', entry.label + ' entfernen');
-      remove.textContent = '✕';
-      remove.addEventListener('mousedown', function (event) { event.preventDefault(); });
-      row.append(button, remove);
+      row.appendChild(button);
+      if (model.canRemove !== false) {
+        var remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'orl-x';
+        remove.dataset.act = 'drop';
+        remove.dataset.id = seat.id;
+        remove.setAttribute('aria-label', entry.label + ' entfernen');
+        remove.textContent = '✕';
+        remove.addEventListener('mousedown', function (event) { event.preventDefault(); });
+        row.appendChild(remove);
+      }
       box.appendChild(row);
     });
   }
@@ -129,7 +132,9 @@ export const ROSTER_LOBBY_SOURCE = String.raw`
     var box = root.querySelector('.orl-roster');
     if (!box) return;
     box.innerHTML = (model.seated || []).map(function (seat) {
-      return '<div class="orl-person"><span>' + esc(seat.label) + '</span><button type="button" class="orl-x" data-act="drop" data-id="' + esc(seat.id) + '" aria-label="' + esc(seat.label) + ' entfernen">✕</button></div>';
+      var locked = model.viewOnly || model.canRemove === false;
+      var remove = locked ? '' : '<button type="button" class="orl-x" data-act="drop" data-id="' + esc(seat.id) + '" aria-label="' + esc(seat.label) + ' entfernen">✕</button>';
+      return '<div class="orl-person"' + (locked ? ' style="padding-right:12px"' : '') + '><span>' + esc(seat.label) + '</span>' + remove + '</div>';
     }).join('');
     var start = root.querySelector('[data-act="start"]');
     if (start) start.disabled = !!model.startDisabled;
@@ -154,16 +159,19 @@ export const ROSTER_LOBBY_SOURCE = String.raw`
     modal.querySelector('.orl-text').textContent = role.text || '';
   }
   function shell() {
-    var create = creating
-      ? '<form class="orl" data-act="create"><input id="orl-first" maxlength="16" placeholder="Anzeigename" aria-label="Anzeigename" autocomplete="off"><input id="orl-tag" maxlength="5" placeholder="Tag" aria-label="Tag" autocomplete="off" autocapitalize="characters"><button class="orl-btn" type="submit">Speichern und hinzufügen</button><button type="button" class="orl-btn ghost" data-act="cancel">Zurück</button></form>'
-      : '<button type="button" class="orl-btn secondary" data-act="new">Neue Person</button>';
-    root.innerHTML = '<div class="orl">'
-      + '<input id="orl-name" maxlength="80" placeholder="Name eingeben" aria-label="Name suchen" autocomplete="off" autocapitalize="words" value="' + esc(model.query) + '">'
+    var tools = model.viewOnly ? '' : (
+      '<input id="orl-name" maxlength="80" placeholder="Name eingeben" aria-label="Name suchen" autocomplete="off" autocapitalize="words" value="' + esc(model.query) + '">'
       + '<div class="orl-suggest"></div>'
-      + create
+      + (creating
+        ? '<form class="orl" data-act="create"><input id="orl-first" maxlength="16" placeholder="Anzeigename" aria-label="Anzeigename" autocomplete="off"><input id="orl-tag" maxlength="5" placeholder="Tag" aria-label="Tag" autocomplete="off" autocapitalize="characters"><button class="orl-btn" type="submit">Speichern und hinzufügen</button><button type="button" class="orl-btn ghost" data-act="cancel">Zurück</button></form>'
+        : '<button type="button" class="orl-btn secondary" data-act="new">Neue Person</button>')
+    );
+    var start = model.viewOnly ? '' : '<button type="button" class="orl-btn" data-act="start"' + (model.startDisabled ? ' disabled' : '') + '>' + esc(model.startLabel || 'Spiel starten') + '</button>';
+    root.innerHTML = '<div class="orl">'
+      + tools
       + '<div class="orl-roster"></div>'
       + '<div class="orl-roles"></div>'
-      + '<button type="button" class="orl-btn" data-act="start"' + (model.startDisabled ? ' disabled' : '') + '>' + esc(model.startLabel || 'Spiel starten') + '</button>'
+      + start
       + '<button type="button" class="orl-link" data-act="stats">' + esc(model.statsLabel || 'Statistik') + '</button>'
       + '<div class="orl-card">' + (model.rulesHtml || '') + '</div>'
       + '<div class="orl-modal" hidden><div class="orl-sheet" role="dialog" aria-modal="true"><p class="emoji"></p><h2></h2><p class="orl-team"></p><p class="orl-text"></p><button type="button" class="orl-btn" data-act="role-close">Schließen</button></div></div>'
@@ -178,6 +186,7 @@ export const ROSTER_LOBBY_SOURCE = String.raw`
     if (input) input.addEventListener('focusout', function (event) {
       var next = event.relatedTarget;
       if (next && next.closest && next.closest('.orl-suggest')) return;
+      if (press) return;
       var box = root.querySelector('.orl-suggest');
       if (box) box.replaceChildren();
     });
@@ -191,7 +200,9 @@ export const ROSTER_LOBBY_SOURCE = String.raw`
       var button = event.target.closest && event.target.closest('[data-act="pick"],[data-act="drop"],[data-act="role"]');
       press = button || null;
       moved = false;
-      if (button) button.classList.add('pressed');
+      if (!button) return;
+      button.classList.add('pressed');
+      if (button.dataset.act === 'pick' || button.dataset.act === 'drop') event.preventDefault();
     });
     document.addEventListener('pointerup', function () {
       var button = press;
@@ -204,6 +215,7 @@ export const ROSTER_LOBBY_SOURCE = String.raw`
       }
       if (act === 'pick' && handlers.onPick) handlers.onPick(button.dataset.id);
       if (act === 'drop') {
+        if (model.canRemove === false) return;
         setTimeout(function () {
           if (handlers.onRemove) handlers.onRemove(button.dataset.id);
         }, 140);
@@ -239,7 +251,7 @@ export const ROSTER_LOBBY_SOURCE = String.raw`
         return;
       }
       var button = event.target.closest && event.target.closest('[data-act]');
-      if (!button) return;
+      if (!button || button.tagName === 'FORM') return;
       var act = button.dataset.act;
       if (act === 'pick' || act === 'drop' || act === 'role') { event.preventDefault(); event.stopPropagation(); return; }
       event.preventDefault();

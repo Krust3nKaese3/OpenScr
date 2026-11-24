@@ -3,6 +3,7 @@
  * Der Host spricht weiter das NDJSON-Protokoll. Der Browser bekommt dieselben Rahmen als WebSocket-Text.
  */
 import { scriptJson } from '../../bridge/scriptJson';
+import { ROSTER_LOBBY_SOURCE } from '../../shared/rosterLobbySource';
 import { sameSecret } from './guard';
 
 const WS_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
@@ -37,7 +38,7 @@ const GUEST_ERROR_WATCH = `<script>(function(){function log(text){console.warn('
 
 export function guestBootTags(token: string, appId: string, room: string): string {
   const payload = scriptJson({ appId, room });
-  return `<base href="/g/${token}/">${GUEST_ERROR_WATCH}<script>window.__OPEN_SCR_GUEST__=${payload};</script><script src="openscr-guest.js"></script>`;
+  return `<base href="/g/${token}/">${GUEST_ERROR_WATCH}<script>window.__OPEN_SCR_GUEST__=${payload};</script><script>${ROSTER_LOBBY_SOURCE}</script><script src="openscr-guest.js"></script>`;
 }
 
 export function injectGuestDocument(html: string, token: string, appId: string, room: string): string {

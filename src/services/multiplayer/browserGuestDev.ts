@@ -2,7 +2,8 @@
  * Registers the open scrapp with the dev guest server and relays guest
  * WebSocket text back into the host room.
  */
-import { GUEST_SHIM_SOURCE, injectGuestDocument } from './guestHttp';
+import { devFolderFor } from '../devFolder';
+import { GUEST_SHIM_SOURCE, guestBootTags, injectGuestDocument } from './guestHttp';
 import type { GuestContent } from './guestContent';
 import type { GuestServer } from './guestServer';
 import type { MpLink } from './transport';
@@ -52,7 +53,14 @@ export async function openBrowserDevGuest(opts: {
   const response = await fetch(`${DEV}/openscr-dev-guest`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ token: opts.token, appId: opts.appId, room: opts.room, files }),
+    body: JSON.stringify({
+      token: opts.token,
+      appId: opts.appId,
+      room: opts.room,
+      root: devFolderFor(opts.appId),
+      boot: guestBootTags(opts.token, opts.appId, opts.room),
+      files,
+    }),
   });
   if (!response.ok) throw new Error((await response.text()) || 'Der Gastserver im Browser ist nicht gestartet.');
   const info = await response.json() as { port: number; ip: string };
