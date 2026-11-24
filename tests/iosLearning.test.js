@@ -161,7 +161,7 @@ test('source view keeps entry HTML and JS and the code pane stays at most 80 per
   assert.match(home, /Platform\.OS !== 'ios'[\s\S]{0,400}toolbarButtonText\}>Spotify/);
   assert.match(home, /Platform\.OS !== 'ios'[\s\S]{0,250}<SpotifySettingsModal/);
   const appJson = JSON.parse(fs.readFileSync(path.join(root, 'app.json'), 'utf8'));
-  assert.strictEqual(appJson.expo.ios.buildNumber, '3');
+  assert.strictEqual(appJson.expo.ios.buildNumber, '4');
   const plugins = JSON.stringify(appJson.expo.plugins);
   assert.ok(plugins.indexOf('withoutIosPush') < plugins.indexOf('expo-notifications'));
   assert.ok(plugins.indexOf('withIosCameraPurpose') < plugins.indexOf('expo-camera'));
