@@ -1,6 +1,6 @@
 # Privacy policy for OpenScr
 
-As of 17 November 2026
+As of 24 November 2026
 
 **Draft, not legal advice.** Have the text reviewed before publication. Age labels in the catalog are the publisher's recommendations, not an official rating.
 
@@ -55,7 +55,7 @@ Spotify, storage, multiplayer and every other bridge feature need their own cons
 
 The setting “Über dem Sperrbildschirm anzeigen” is per OpenScrapp and stays off until you turn it on. When it is on, Android shows only the OpenScrapp that is open over the device lock, without the PIN. The screen may still turn off. The catalog, settings and other OpenScr screens stay behind the lock. The same setting posts a notification on the device that shows the OpenScrapp’s name on the lock screen. Tapping it opens only that OpenScrapp. The notice can be swiped away and is removed when you turn the setting off. The setting stays on the device.
 
-The bridge does not expose the file system, contacts or GPS coordinates. The camera is used to read QR codes (install an OpenScrapp or join a game room). OpenScr does not save a photo from that scan. The microphone is not used.
+The bridge does not expose a general file system, contacts, the photo library, or GPS coordinates. The camera reads a QR code when you install an OpenScrapp you own, and it opens when an OpenScrapp you wrote asks for a photo or a QR code. The photo stays a data URI inside that OpenScrapp. OpenScr does not save it to the photo library. The microphone is not used. After consent, that OpenScrapp may read or write text on the clipboard. A file is written only to OpenScr's cache and then offered through the system share sheet, so you can save it, for example to Files. Local notifications are prefixed with the OpenScrapp name. Deleting the OpenScrapp cancels its scheduled notifications.
 
 OpenScr does not request a location permission. `ACCESS_FINE_LOCATION` and `ACCESS_BACKGROUND_LOCATION` are not part of this release. GPS coordinates are not read. On current Android versions the Wi-Fi name is not available without that permission, so it stays hidden. Bluetooth scanning is not used to derive a location (`neverForLocation`).
 
@@ -65,7 +65,7 @@ A foreground service with a visible notification (“OpenScr aktiv”) runs only
 
 On Android, “Empfohlen” shows OpenScrapps from the catalog (name, repository, description, age label). A blocklist can disable an OpenScrapp for every install; the app then shows the reason and does not start it. There is no separate user database for that. The iOS version does not have this list. There you sign in with your GitHub account and load only repositories owned by that account. Signing out deletes the token and disables those OpenScrapps. A remote catalog file cannot turn the catalog on for iOS.
 
-On iOS an OpenScrapp can use only storage, sensors, HTTP, Bluetooth LE, vibration and keeping the screen awake. An Android build flag `EXPO_PUBLIC_CATALOG_ONLY` turns free GitHub links off and keeps the catalog plus developer mode. Builds without the flag keep free installation with a warning. The Play build leaves the flag off.
+On iOS an OpenScrapp can use storage, sensors, HTTP, Bluetooth LE, vibration, keeping the screen awake, the clipboard, the share sheet, the camera, and local notifications. The photo library, the microphone, and push are not available there. An Android build flag `EXPO_PUBLIC_CATALOG_ONLY` turns free GitHub links off and keeps the catalog plus developer mode. Builds without the flag keep free installation with a warning. The Play build leaves the flag off.
 
 ## Legal bases
 

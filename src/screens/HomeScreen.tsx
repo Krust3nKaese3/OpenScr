@@ -7,6 +7,7 @@ import {
   TextInput,
   Modal,
   ScrollView,
+  type ScrollViewInstance,
   ActivityIndicator,
   Animated,
   Platform,
@@ -89,7 +90,7 @@ export const HomeScreen: React.FC = () => {
   const [installingRepo, setInstallingRepo] = useState<string | null>(null);
   const [revealId, setRevealId] = useState<string | null>(null);
   const [tileTick, setTileTick] = useState(0);
-  const homeScrollRef = useRef<ScrollView>(null);
+  const homeScrollRef = useRef<ScrollViewInstance>(null);
   const tileY = useRef<Record<string, number>>({});
   const bounce = useRef(new Animated.Value(1)).current;
   const [selectedApp, setSelectedApp] = useState<MiniApp | null>(null);

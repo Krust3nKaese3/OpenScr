@@ -24,6 +24,7 @@ const {
   resetMultiplayerForTests,
   configureMultiplayer,
   subscribeMpUi,
+  subscribeHostPresence,
 } = require('../src/services/multiplayer/session.ts');
 const { createMemoryRoomStore } = require('../src/services/multiplayer/persist.ts');
 
@@ -251,6 +252,8 @@ test('Browser-Gast bekommt nach Reload den letzten Spielstand, ein App-Gast nich
   const events = [];
   let ui = null;
   subscribeMpUi((state) => { ui = state; });
+  let presence = null;
+  subscribeHostPresence((state) => { presence = state; });
   configureMultiplayer({
     store,
     guestPlatform: true,
@@ -281,7 +284,7 @@ test('Browser-Gast bekommt nach Reload den letzten Spielstand, ein App-Gast nich
     const hosted = await hostMultiplayer('wolf', (event, data) => events.push({ event, data }), { name: 'Ada', maxPlayers: 4 }, transport);
     assert.match(hosted.gameUrl, /^http:\/\/192\.168\.1\.20:\d+\/g\/[0-9a-f]+\/$/);
     await new Promise((resolve) => setImmediate(resolve));
-    assert.match(ui.batteryWarning, /Akku niedrig \(15 %\)/);
+    assert.match(presence.batteryWarning, /Akku niedrig \(15 %\)/);
 
     const token = hosted.gameUrl.split('/g/')[1].replace(/\/$/, '');
     const bare = fakeConn();

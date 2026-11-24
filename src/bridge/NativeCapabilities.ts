@@ -11,7 +11,7 @@ import { BluetoothDevice, HttpRequest, HttpResponse } from '../types';
 import { EventEmitter } from './EventEmitter';
 import { BackgroundService } from '../services/BackgroundService';
 import { BackgroundTasks, restartTimers, getTileSlots, setUi, updateTile, updateWidget, getUi, wifiInfo, tileHandle, popupApi } from '../services/BackgroundTasks';
-import { PermissionsAndroid, Platform } from 'react-native';
+import { PermissionsAndroid, Platform, Share } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import * as NetworkInfo from '../../modules/expo-network-info';
 import * as Ble from '../../modules/expo-ble-gatt';
@@ -74,6 +74,11 @@ import { roomStore } from '../services/multiplayer/secureRoomStore';
 import { setHostKeepAlive } from '../services/multiplayer/hostKeepAlive';
 import { setKeepAwake } from '../services/keepAwake';
 import { addPlayer, listPlayers, removePlayer, updatePlayer } from '../services/playerRoster';
+import { requestCameraCapture } from '../services/cameraCapture';
+import { EXPORT_MIME_DEFAULT, safeExportFileName } from '../services/shareExport';
+import { NOTIFICATION_APP_KEY, notificationTitle } from '../services/scrappNotify';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -260,10 +265,16 @@ export class NativeCapabilities {
 
   notifications = {
     schedule: async (title: string, body: string, seconds: number): Promise<void> => {
+      const permission = await Notifications.requestPermissionsAsync();
+      const granted = permission.granted || permission.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL;
+      if (!granted) throw new Error('Benachrichtigungen sind nicht erlaubt.');
+      const apps = await StorageService.getApps();
+      const name = apps.find((app) => app.id === this.appId)?.manifest?.name || 'OpenScrapp';
       await Notifications.scheduleNotificationAsync({
         content: {
-          title,
+          title: notificationTitle(name, title),
           body,
+          data: { [NOTIFICATION_APP_KEY]: this.appId },
         },
         trigger: seconds && seconds > 0
           ? ({ type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds, repeats: false } as any)
@@ -273,12 +284,34 @@ export class NativeCapabilities {
   };
 
   camera = {
-    takePicture: async (): Promise<string> => {
-      const { status } = await Camera.requestCameraPermissionsAsync();
-      if (status !== 'granted') {
-        throw new Error('Camera permission not granted');
+    takePicture: async (): Promise<string> => this.openCamera('photo'),
+    scanQr: async (): Promise<string> => this.openCamera('qr'),
+  };
+
+  private async openCamera(mode: 'photo' | 'qr'): Promise<string> {
+    const { status } = await Camera.requestCameraPermissionsAsync();
+    if (status !== 'granted') throw new Error('Kamerazugriff nicht erlaubt.');
+    return requestCameraCapture(mode);
+  }
+
+  share = {
+    text: async (text: string): Promise<{ action: string }> => {
+      const result = await Share.share({ message: text });
+      return { action: result.action };
+    },
+    exportFile: async (name: string, contents: string, mime?: string): Promise<{ name: string }> => {
+      const fileName = safeExportFileName(name);
+      const dir = `${FileSystem.cacheDirectory}openscr-export/`;
+      await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+      const uri = `${dir}${fileName}`;
+      await FileSystem.writeAsStringAsync(uri, contents);
+      const mimeType = mime || EXPORT_MIME_DEFAULT;
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, { mimeType, dialogTitle: fileName, UTI: 'public.data' });
+      } else {
+        await Share.share({ url: uri, message: fileName, title: fileName });
       }
-      return 'Camera feature requires UI component';
+      return { name: fileName };
     },
   };
 

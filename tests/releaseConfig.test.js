@@ -14,7 +14,7 @@ function between(markdown, name) {
 test('play release config keeps an AAB profile and drops unused permissions', () => {
   const app = JSON.parse(fs.readFileSync(path.join(root, 'app.json'), 'utf8'));
   const eas = JSON.parse(fs.readFileSync(path.join(root, 'eas.json'), 'utf8'));
-  assert.strictEqual(app.expo.version, '1.0.0');
+  assert.strictEqual(app.expo.version, '1.1.0');
   assert.strictEqual(app.expo.android.versionCode, 1);
   const permissions = app.expo.android.permissions.map(String);
   for (const name of ['RECORD_AUDIO', 'ACCESS_FINE_LOCATION', 'ACCESS_BACKGROUND_LOCATION', 'REQUEST_IGNORE_BATTERY_OPTIMIZATIONS']) {

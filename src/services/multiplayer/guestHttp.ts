@@ -603,6 +603,7 @@ export const GUEST_SHIM_SOURCE = `(function () {
     tiles: stub(),
     spotify: null,
     clipboard: stub(),
+    share: stub(),
     network: stub(),
     media: stub(),
     crypto: stub(),

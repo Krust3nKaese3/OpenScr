@@ -2,14 +2,14 @@
   "expo": {
     "name": "OpenScr",
     "slug": "everyapp",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.openscr.app",
-      "buildNumber": "3",
+      "buildNumber": "4",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSBluetoothAlwaysUsageDescription": "OpenScr uses Bluetooth LE only when an OpenScrapp you opened asks to talk to a Bluetooth device nearby."
@@ -62,6 +62,7 @@
           }
         }
       ],
+      "./plugins/withIosCameraPurpose.js",
       [
         "expo-camera",
         {

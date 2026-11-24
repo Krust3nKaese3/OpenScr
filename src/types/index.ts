@@ -22,6 +22,7 @@ export type Permission =
   | 'tiles'
   | 'spotify'
   | 'clipboard'
+  | 'share'
   | 'network'
   | 'media'
   | 'secrets'

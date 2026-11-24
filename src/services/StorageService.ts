@@ -11,6 +11,7 @@ import {
 import { GitRepoService } from './GitRepoService';
 import { SecretStore } from './SecretStore';
 import { SHOW_OVER_LOCK_KEY, clearOverLockNotice, readShowOverLockMap } from './showOverLock';
+import { cancelScheduledForApp } from './scrappNotify';
 
 const APPS_KEY = '@everyapp_apps';
 const FOLDERS_KEY = '@everyapp_folders';
@@ -80,6 +81,7 @@ export class StorageService {
       lockAsked: parseJsonRecord(lockRaw),
     };
     try { clearOverLockNotice(appId); } catch { /* Älterer Build hat die Meldung nicht. */ }
+    try { await cancelScheduledForApp(appId); } catch (error) { console.error('[EveryApp] notification purge', error); }
     const next = purgeHostRecords(current, appId);
     const overLock = readShowOverLockMap(overLockRaw);
     delete overLock[appId];

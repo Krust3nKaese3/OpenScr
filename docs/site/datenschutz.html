@@ -21,7 +21,7 @@
   </header>
   <main>
 <h1 id="datenschutzerklärung-für-openscr">Datenschutzerklärung für OpenScr</h1>
-<p>Stand: 17. November 2026</p>
+<p>Stand: 24. November 2026</p>
 <p><strong>Entwurf, keine Rechtsberatung.</strong> Den Text vor der Veröffentlichung rechtlich prüfen lassen. Altersangaben im Katalog sind Empfehlungen des Anbieters, keine behördliche Kennzeichnung.</p>
 <h2 id="verantwortliche-stelle">Verantwortliche Stelle</h2>
 <p>Manuel Di Liberto</p>
@@ -39,6 +39,7 @@
 <li>die heruntergeladenen Dateien der OpenScrapp und der Commit von <code>main</code>, der installiert wurde</li>
 <li>erlaubte und abgelehnte Berechtigungen je OpenScrapp</li>
 <li>der Speicher der OpenScrapp. Schlüssel beginnen mit <code>@miniapp_</code> und der Kennung der OpenScrapp. Andere OpenScrapps lesen diesen Speicher nicht. Ein Wert ist Text und höchstens 256 KiB</li>
+<li>die gemeinsame Spielernamenliste auf diesem Gerät. Ein Eintrag ist Anzeigename und Tag, angezeigt als <code>Name#Tag</code>. Jede OpenScrapp kann diese Liste lesen und ändern. Sie hängt nicht an einer einzelnen OpenScrapp</li>
 <li>Geheimnisse, die eine OpenScrapp ablegt. Liegt das Modul <code>expo-secure-store</code> im Build, stehen sie im gerätegeschützten Speicher, sonst im App-Speicher. Beim ersten Zugriff werden ältere Einträge dorthin übernommen</li>
 <li>die Spotify-Client-ID, wenn du sie einträgst, und ein Spiegel derselben ID im App-Speicher</li>
 <li>Zugriffs- und Aktualisierungstoken der Spotify-Web-API in den app-privaten Einstellungen unter dem Namen <code>everyapp_spotify</code>. Die OpenScrapp erhält diese Token nicht</li>
@@ -59,12 +60,12 @@
 <h2 id="berechtigungen">Berechtigungen</h2>
 <p>Spotify, Speicher, Mehrspieler und jede andere Brücken-Funktion brauchen eine eigene Zustimmung pro OpenScrapp. Die Entscheidung wird zu dieser OpenScrapp gespeichert. In „Info und Berechtigungen“ kannst du sie widerrufen.</p>
 <p>Die Einstellung „Über dem Sperrbildschirm anzeigen“ gilt pro OpenScrapp und ist aus, bis du sie einschaltest. Eingeschaltet zeigt Android nur die gerade geöffnete OpenScrapp über der Gerätesperre, ohne die PIN. Der Bildschirm darf dabei ausgehen. Katalog, Einstellungen und andere Bildschirme von OpenScr bleiben hinter der Sperre. Dieselbe Einstellung legt eine Benachrichtigung auf das Gerät, die auf dem Sperrbildschirm den Namen der OpenScrapp zeigt. Tippen öffnet nur diese OpenScrapp. Die Meldung lässt sich wegwischen und wird gelöscht, wenn du die Einstellung ausschaltest. Die Einstellung bleibt auf dem Gerät.</p>
-<p>Die Brücke gibt kein Dateisystem, keine Kontakte und keine GPS-Koordinaten frei. Die Kamera dient dem Lesen von QR-Codes (OpenScrapp installieren oder einem Spielraum beitreten). OpenScr speichert dabei kein Foto. Ein Mikrofon wird nicht verwendet.</p>
+<p>Die Brücke gibt kein allgemeines Dateisystem, keine Kontakte, keine Fotomediathek und keine GPS-Koordinaten frei. Die Kamera liest einen QR-Code, wenn du eine eigene OpenScrapp installierst, und sie öffnet sich, wenn eine OpenScrapp, die du selbst geschrieben hast, ein Foto oder einen QR-Code anfordert. Das Foto bleibt eine Daten-URI in dieser OpenScrapp. OpenScr speichert es nicht in der Fotomediathek. Ein Mikrofon wird nicht verwendet. Nach Zustimmung darf diese OpenScrapp Text in die Zwischenablage legen oder daraus lesen. Eine Datei schreibt sie nur in den Cache von OpenScr und öffnet dann das Teilen-Menü, damit du sie zum Beispiel in „Dateien“ sichern kannst. Lokale Benachrichtigungen tragen den Namen der OpenScrapp. Beim Löschen werden ihre geplanten Benachrichtigungen entfernt.</p>
 <p>OpenScr fordert keine Standortberechtigung an. <code>ACCESS_FINE_LOCATION</code> und <code>ACCESS_BACKGROUND_LOCATION</code> sind nicht Teil dieses Release. GPS-Koordinaten werden nicht gelesen. Den WLAN-Namen gibt Android auf aktuellen Versionen ohne diese Berechtigung nicht heraus; dann bleibt er verborgen. Bluetooth-Suche ist nicht dazu da, einen Standort abzuleiten (<code>neverForLocation</code>).</p>
 <p>Ein Vordergrunddienst mit sichtbarer Benachrichtigung („OpenScr aktiv“) läuft nur, solange eine OpenScrapp ein Intervall, eine fällige oder verbundene Bluetooth-LE-Benachrichtigung oder einen gehosteten Spielraum braucht. Die Benachrichtigung verlässt das Gerät nicht.</p>
 <h2 id="katalog-und-sperrliste">Katalog und Sperrliste</h2>
 <p>Auf Android zeigt „Empfohlen“ OpenScrapps aus dem Katalog (Name, Repository, Beschreibung, Altersangabe). Eine Sperrliste kann eine OpenScrapp für alle Installationen deaktivieren; die App zeigt dann den Grund und startet sie nicht. Es gibt keine zusätzliche Nutzerdatenbank dafür. Die iOS-Version hat diese Liste nicht. Dort meldest du dich mit deinem GitHub-Konto an und lädst nur Repositories, deren Besitzer dieses Konto ist. Abmelden löscht das Token und schaltet diese OpenScrapps aus. Eine ferne Katalogdatei schaltet den Katalog auf iOS nicht ein.</p>
-<p>Auf iOS kann eine OpenScrapp nur Speicher, Sensoren, HTTP, Bluetooth LE, Vibration und Bildschirm wachhalten nutzen. Eine Android-Build-Einstellung <code>EXPO_PUBLIC_CATALOG_ONLY</code> schaltet freie GitHub-Links ab und behält den Katalog plus den Entwicklermodus. Builds ohne diese Einstellung behalten die freie Installation mit Warnung. Der Play-Build lässt die Einstellung aus.</p>
+<p>Auf iOS kann eine OpenScrapp Speicher, Sensoren, HTTP, Bluetooth LE, Vibration, Bildschirm wachhalten, Zwischenablage, Teilen, Kamera und lokale Benachrichtigungen nutzen. Fotomediathek, Mikrofon und Push gibt es dort nicht. Eine Android-Build-Einstellung <code>EXPO_PUBLIC_CATALOG_ONLY</code> schaltet freie GitHub-Links ab und behält den Katalog plus den Entwicklermodus. Builds ohne diese Einstellung behalten die freie Installation mit Warnung. Der Play-Build lässt die Einstellung aus.</p>
 <h2 id="rechtsgrundlagen">Rechtsgrundlagen</h2>
 <ul>
 <li>Art. 6 Abs. 1 lit. b DSGVO, soweit die Verarbeitung nötig ist, um die Funktion auszuführen, die du startest: OpenScrapp laden und speichern, aktualisieren, lokal spielen, Spotify steuern, im Entwicklermodus das eigene Repository laden.</li>

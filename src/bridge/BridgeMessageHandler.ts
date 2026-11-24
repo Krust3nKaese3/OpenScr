@@ -198,6 +198,7 @@ export class BridgeMessageHandler {
           },
           camera: {
             takePicture: () => sendMessage('camera.takePicture', []),
+            scanQr: () => sendMessage('camera.scanQr', []),
           },
           sensors: {
             getAccelerometer: () => sendMessage('sensors.getAccelerometer', []),
@@ -307,6 +308,10 @@ export class BridgeMessageHandler {
           clipboard: {
             setString: (text) => sendMessage('clipboard.setString', [text]),
             getString: () => sendMessage('clipboard.getString', []),
+          },
+          share: {
+            text: (text) => sendMessage('share.text', [text]),
+            exportFile: (name, contents, mime) => sendMessage('share.exportFile', mime ? [name, contents, mime] : [name, contents]),
           },
           multiplayer: {
             host: (opts) => sendMessage('multiplayer.host', opts ? [opts] : []),
