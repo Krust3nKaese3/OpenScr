@@ -33,7 +33,7 @@ export function playerKey(name: string, tag: string): string {
 }
 
 export function formatPlayer(player: Pick<PlayerRecord, 'name' | 'tag'>): string {
-  return `${player.name}#${player.tag}`;
+  return `${player.name} #${player.tag}`;
 }
 
 export function checkPlayerParts(name: unknown, tag: unknown): { name: string; tag: string } {
