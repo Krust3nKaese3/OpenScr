@@ -1,6 +1,6 @@
 # Nutzungsbedingungen und Impressum für OpenScr
 
-Stand: 17. November 2026
+Stand: 24. November 2026
 
 **Entwurf, keine Rechtsberatung.** Den Text vor der Veröffentlichung rechtlich prüfen lassen.
 
@@ -32,15 +32,15 @@ Installierst du auf Android eine Adresse, die nicht im Katalog steht (Eingabe, Q
 
 Die iOS-Version hat keinen Katalog. Du meldest dich mit deinem GitHub-Konto an (Geräte-Anmeldung oder persönliches Token, nur auf diesem Gerät gespeichert). Danach lassen sich nur Repositories laden, deren Besitzer dieses Konto ist. Fremde Links, QR-Codes und Add-Links werden abgelehnt. Die Zugehörigkeit wird beim Hinzufügen, beim Aktualisieren und beim Öffnen erneut bei GitHub geprüft. Abmelden schaltet diese OpenScrapps aus. Eine ferne Katalogdatei ändert das nicht.
 
-Auf iOS stellt OpenScr einer OpenScrapp nur Speicher, Sensoren, HTTP, Bluetooth LE, Vibration und Bildschirm wachhalten zur Verfügung. Hintergrundaufgaben, Kacheln, Popups, Roh-Sockets und andere Funktionen außerhalb der sichtbaren Entwicklungsumgebung gibt es dort nicht.
+Auf iOS stellt OpenScr einer OpenScrapp Speicher, Sensoren, HTTP, Bluetooth LE, Vibration, Bildschirm wachhalten, Zwischenablage, Teilen, Kamera und lokale Benachrichtigungen zur Verfügung. Hintergrundaufgaben, Kacheln, Popups, Roh-Sockets, die Fotomediathek und andere Funktionen außerhalb der sichtbaren Entwicklungsumgebung gibt es dort nicht.
 
 Ein Android-Build mit `EXPO_PUBLIC_CATALOG_ONLY=1` (Profil `production-catalog`) lässt freie GitHub-Links nicht zu und behält den Katalog. Der Android-Build für Google Play behält die freie Installation mit Warnung.
 
 ## Berechtigungen
 
-Eine OpenScrapp erhält Gerätefunktionen nur nach einmaliger Zustimmung für diese OpenScrapp. Auf Android gehören dazu Spotify, Speicher und Mehrspieler. Auf iOS sind es Speicher, Sensoren, HTTP, Bluetooth LE, Vibration und Bildschirm wachhalten. Du kannst die Zustimmung in den App-Infos widerrufen. Ohne Zustimmung bleibt die Funktion aus.
+Eine OpenScrapp erhält Gerätefunktionen nur nach einmaliger Zustimmung für diese OpenScrapp. Auf Android gehören dazu Spotify, Speicher und Mehrspieler. Auf iOS sind es Speicher, Sensoren, HTTP, Bluetooth LE, Vibration, Bildschirm wachhalten, Zwischenablage, Teilen, Kamera und lokale Benachrichtigungen. Du kannst die Zustimmung in den App-Infos widerrufen. Ohne Zustimmung bleibt die Funktion aus.
 
-Dateisystem, Kontakte und GPS-Koordinaten stellt OpenScr OpenScrapps nicht zur Verfügung. Die Kamera liest QR-Codes. Ein Mikrofon wird nicht verwendet. Eine Standortberechtigung ist in diesem Release nicht enthalten.
+Ein allgemeines Dateisystem, Kontakte, die Fotomediathek und GPS-Koordinaten stellt OpenScr OpenScrapps nicht zur Verfügung. Die Kamera nimmt auf Zuruf ein Foto als Daten-URI auf oder liest einen QR-Code. Ein Mikrofon wird nicht verwendet. Eine Standortberechtigung ist in diesem Release nicht enthalten.
 
 ## Melden und Sperren
 

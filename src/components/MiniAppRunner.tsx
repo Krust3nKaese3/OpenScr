@@ -19,6 +19,8 @@ import { takeDeepLink, onDeepLinkQueued, deepLinkInjection } from '../services/d
 import { setupGlobalErrorHandler, removeGlobalErrorHandler } from '../utils/errorHandler';
 import { MultiplayerOverlay } from './MultiplayerOverlay';
 import { SourceCodeModal } from './SourceCodeModal';
+import { CameraCaptureOverlay } from './CameraCaptureOverlay';
+import { cancelCameraCapture } from '../services/cameraCapture';
 import { learningPaneHeights, permissionsOfferedOnPlatform, showsLearningChrome } from '../services/iosPolicy';
 import { cancelMpScan, detachMultiplayer, dismissMpUi, endRoom, submitMpScan, subscribeMpUi, subscribeHostPresence, approveJoin, denyJoin, resumeMultiplayer, showMultiplayerQr, type HostPresence, type MpUiState } from '../services/multiplayer/session';
 import { setGuestContent } from '../services/multiplayer/guestContent';
@@ -153,6 +155,7 @@ const MiniAppRunnerBase: React.FC<MiniAppRunnerProps> = ({ app, onClose, onLeave
       backSub.remove();
       removeGlobalErrorHandler();
       if (Platform.OS !== 'web') ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+      cancelCameraCapture('Die OpenScrapp wurde geschlossen.');
       if (capabilitiesRef.current) {
         capabilitiesRef.current.cleanup();
       }
@@ -600,6 +603,7 @@ const MiniAppRunnerBase: React.FC<MiniAppRunnerProps> = ({ app, onClose, onLeave
           <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>{hostPresence.batteryWarning ? 'Einladen · Akku' : 'Einladen'}</Text>
         </TouchableOpacity>
       ) : null}
+      {Platform.OS === 'web' ? null : <CameraCaptureOverlay />}
       </View>
 
       <PermissionRequestModal

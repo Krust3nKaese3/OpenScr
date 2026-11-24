@@ -147,8 +147,8 @@ test('Bridge erlaubt Mehrspieler nur mit der passenden Berechtigung', () => {
   const host = bridgeMethod('multiplayer.host');
   assert.strictEqual(host.category, 'multiplayer');
   assert.strictEqual(host.action, 'host');
-  assert.deepStrictEqual(host.validate([]), [{ maxPlayers: undefined, name: undefined, discoverable: undefined, joinApproval: undefined }]);
-  assert.deepStrictEqual(host.validate([{ maxPlayers: 4, name: 'Ada', discoverable: true, joinApproval: false }]), [{ maxPlayers: 4, name: 'Ada', discoverable: true, joinApproval: false }]);
+  assert.deepStrictEqual(host.validate([]), [{ maxPlayers: undefined, name: undefined, discoverable: undefined, joinApproval: undefined, quiet: undefined }]);
+  assert.deepStrictEqual(host.validate([{ maxPlayers: 4, name: 'Ada', discoverable: true, joinApproval: false }]), [{ maxPlayers: 4, name: 'Ada', discoverable: true, joinApproval: false, quiet: undefined }]);
   assert.throws(() => host.validate([{ maxPlayers: 99 }]), /maxPlayers/);
   const join = bridgeMethod('multiplayer.join');
   assert.deepStrictEqual(join.validate(['openscr-mp://join']), ['openscr-mp://join']);

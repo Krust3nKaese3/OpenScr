@@ -1,6 +1,6 @@
 # App Review: Lern- und Entwicklerwerkzeug
 
-Stand: 17. November 2026
+Stand: 24. November 2026
 
 **Das ist keine Rechtsberatung und keine Aussage, dass Apple OpenScr bereits freigegeben hat.** Die Richtlinie wird auf [developer.apple.com/app-store/review/guidelines](https://developer.apple.com/app-store/review/guidelines/) gepflegt. Unten steht, was die iOS-App tatsächlich tut. Was die App nicht tut, ist ausdrücklich genannt, damit es in den Review-Notizen nicht behauptet wird.
 
@@ -37,11 +37,15 @@ Die OpenScrapp erreicht das Gerät nur über die Allowlist. Auf iOS sind das:
 - Sensoren: `sensors.getAccelerometer`, `sensors.getGyroscope`
 - Bluetooth LE: `ble.isAvailable`, `ble.scan`, `ble.connect`, `ble.disconnect`, `ble.write`, `ble.read`, `ble.notify`
 - Vibration, solange die OpenScrapp sichtbar ist: `vibration.vibrate`
+- Zwischenablage nach Zustimmung dieser OpenScrapp: `clipboard.setString`, `clipboard.getString`
+- Teilen: `share.text`, `share.exportFile` (Cache der App, dann das System-Teilen-Menü)
+- Kamera: `camera.takePicture`, `camera.scanQr` (sichtbare Vorschau, Auslösen und Abbrechen; Daten-URI oder gelesener Text; nicht in der Fotomediathek; kein Mikrofon)
+- lokale Benachrichtigungen: `notifications.schedule` (Systemabfrage, Titel mit dem Namen der OpenScrapp; Löschen entfernt die geplanten Meldungen dieser OpenScrapp). Kein Push, kein `aps-environment`
 - das Event `app.start`
 
-Jede dieser Kategorien braucht eine einmalige Zustimmung, außer dem Event-Kanal. Dateisystem, Kontakte und Standort gibt es nicht.
+Jede dieser Kategorien braucht eine einmalige Zustimmung, außer dem Event-Kanal und dem Bildschirm-Wachhalten. Ein allgemeines Dateisystem, die Fotomediathek, Kontakte und Standort gibt es nicht.
 
-Auf iOS nicht verfügbar, auch nicht durch eine ferne Datei: Roh-TCP, Roh-UDP, Tuya, Hintergrundaufgaben, Makros, Kacheln, Popups, klassisches Bluetooth, Benachrichtigungen, Kamera, Spotify, Medientasten, WLAN-Info, Zwischenablage, Geheimnisse, Kryptografie und Mehrspieler. Der Aufruf antwortet auf Deutsch: „Diese Funktion ist auf iOS nicht verfügbar. Erlaubt sind Speicher, Sensoren, HTTP, Bluetooth LE, Vibration und Bildschirm wachhalten.“
+Auf iOS nicht verfügbar, auch nicht durch eine ferne Datei: Roh-TCP, Roh-UDP, Tuya, Hintergrundaufgaben, Makros, Kacheln, Popups, klassisches Bluetooth, Spotify, Medientasten, WLAN-Info, Geheimnisse, Kryptografie und Mehrspieler. Der Aufruf antwortet auf Deutsch: „Diese Funktion ist auf iOS nicht verfügbar. Erlaubt sind Speicher, Sensoren, HTTP, Bluetooth LE, Vibration, Bildschirm wachhalten, Zwischenablage, Teilen, Kamera und lokale Benachrichtigungen.“
 
 Die Android-App ist ein anderes Programm: Katalog, freie öffentliche Repositories nach Warnung, und die längere Bridge. Diese Notiz beschreibt die iOS-App.
 
@@ -78,7 +82,7 @@ The iOS app has no curated catalog and no “Empfohlen” list. `catalog/catalog
 
 The user can read the fetched HTML and JavaScript (the entry file first) from the app menu and from the development bar. The view is read-only. While an OpenScrapp runs, a persistent bar says “Entwicklungsumgebung · eigener Code” and offers Back and Source. The page uses at most 80% of the screen height.
 
-iOS bridge methods are storage, HTTP fetch, accelerometer and gyroscope, Bluetooth LE, vibration, and the `app.start` event. Each category needs one-time consent except the event channel. The app does not expose the file system, contacts, or location. Calls to raw TCP/UDP, Tuya, background tasks, macros, tiles, popups, classic Bluetooth, notifications, camera, Spotify, media keys, Wi-Fi info, clipboard, secrets, crypto, and multiplayer return a German error and do not run. A remote file cannot add those methods back.
+iOS bridge methods are storage, HTTP fetch, accelerometer and gyroscope, Bluetooth LE, vibration, clipboard (`clipboard.setString`, `clipboard.getString`), share sheet (`share.text`, `share.exportFile`), camera (`camera.takePicture`, `camera.scanQr`), local notifications (`notifications.schedule`), and the `app.start` event. Each category needs one-time consent except the event channel and keeping the screen awake. `share.exportFile` writes only into the app cache and then opens the system share sheet so the person can save the file, for example to Files. The camera is a visible full-screen preview with a shutter and cancel. A photo is returned as a data URI. A QR scan returns the scanned string. Photos are not saved to the photo library. There is no photo picker, no `expo-image-picker`, and no `expo-media-library`. The microphone is not used. `notifications.schedule` calls `requestPermissionsAsync` first, prefixes the title with the OpenScrapp name, and those scheduled notifications are cancelled when that OpenScrapp is deleted. Push is not enabled: `plugins/withoutIosPush.js` removes `aps-environment` and is listed before the notifications plugin. The app does not expose a general file system, contacts, or location. Calls to raw TCP/UDP, Tuya, background tasks, macros, tiles, popups, classic Bluetooth, Spotify, media keys, Wi-Fi info, secrets, crypto, and multiplayer return a German error and do not run. A remote file cannot add those methods back.
 
 Android is a different build: a catalog, public repositories after a warning, and the longer bridge. This note is about iOS.
 

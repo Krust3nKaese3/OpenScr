@@ -20,5 +20,5 @@ test('container screens keep the approved names and iOS gates', () => {
   assert.doesNotMatch(invite, /Mitspieler einladen/);
   assert.doesNotMatch(invite, /Scanne den Code in OpenScr/);
   const runner = fs.readFileSync(path.join(root, 'src/components/MiniAppRunner.tsx'), 'utf8');
-  assert.match(runner, /Platform\.OS !== 'android' \? null : \([\s\S]*<MultiplayerOverlay/);
+  assert.match(runner, /Platform\.OS === 'ios' \? null : \([\s\S]*<MultiplayerOverlay/);
 });
