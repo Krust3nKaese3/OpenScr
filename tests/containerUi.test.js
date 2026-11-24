@@ -16,8 +16,8 @@ test('container screens keep the approved names and iOS gates', () => {
   assert.match(home, /Scrapp hinzufügen/);
   assert.match(home, /Nur Code, dem du vertraust/);
   assert.match(home, /showsCuratedCatalog/);
-  assert.match(invite, /Spiel starten/);
-  assert.match(invite, /normalen Kamera/);
+  assert.match(invite, /state\.mode === 'host'\) return null/);
+  assert.doesNotMatch(invite, /Mitspieler einladen/);
   assert.doesNotMatch(invite, /Scanne den Code in OpenScr/);
   const runner = fs.readFileSync(path.join(root, 'src/components/MiniAppRunner.tsx'), 'utf8');
   assert.match(runner, /Platform\.OS !== 'android' \? null : \([\s\S]*<MultiplayerOverlay/);

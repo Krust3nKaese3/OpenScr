@@ -301,6 +301,8 @@ export class BridgeMessageHandler {
             showWifiQr: () => sendMessage('multiplayer.showWifiQr', []),
             showGameQr: () => sendMessage('multiplayer.showGameQr', []),
             showHotspotQr: () => sendMessage('multiplayer.showHotspotQr', []),
+            codes: () => sendMessage('multiplayer.codes', []),
+            qrDataUrl: (text) => sendMessage('multiplayer.qrDataUrl', [text]),
             discover: (opts) => {
               if (opts && opts.onRooms) window.OpenScrBridge.events.on('multiplayer.rooms', (payload) => opts.onRooms(payload.rooms || []));
               return sendMessage('multiplayer.discover', []);

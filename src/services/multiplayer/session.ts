@@ -246,28 +246,13 @@ function snapshot(session: LiveSession): HostResult {
   };
 }
 
-function hostUi(session: LiveSession): MpUiState {
-  const players = session.room ? session.room.players() : session.roster;
-  return {
-    mode: 'host',
-    qrPayload: session.qrPayload,
-    roomCode: session.roomCode,
-    gameUrl: session.gameUrl,
-    guestPhase: session.guestPhase,
-    guestError: session.guestError,
-    batteryWarning: session.batteryWarning,
-    connectedGuests: players.filter((player) => player.connected && !player.host).length,
-  };
-}
-
-function showHost(session: LiveSession, qrFocus?: MpUiState['qrFocus']): void {
+function showHost(session: LiveSession, _qrFocus?: MpUiState['qrFocus']): void {
   publishPresence({
     roomCode: session.roomCode,
     gameUrl: session.gameUrl,
     batteryWarning: session.batteryWarning,
   });
-  const kept = qrFocus ?? (ui?.mode === 'host' ? ui.qrFocus : undefined);
-  setUi({ ...hostUi(session), qrFocus: kept });
+  if (ui?.mode === 'host') setUi(null);
 }
 
 async function hostAwake(on: boolean): Promise<void> {
@@ -304,7 +289,7 @@ async function watchBattery(session: LiveSession): Promise<void> {
   session.batteryWarning = warning;
   if (live === session && session.role === 'host') {
     publishPresence({ roomCode: session.roomCode, gameUrl: session.gameUrl, batteryWarning: warning });
-    if (ui?.mode === 'host') setUi({ ...hostUi(session), qrFocus: ui.qrFocus });
+    if (ui?.mode === 'host') setUi(null);
   }
 }
 
@@ -883,7 +868,7 @@ function startHeartbeat(session: LiveSession): void {
 export async function hostMultiplayer(
   appId: string,
   emit: Emit,
-  opts?: { maxPlayers?: number; name?: string; discoverable?: boolean; joinApproval?: boolean },
+  opts?: { maxPlayers?: number; name?: string; discoverable?: boolean; joinApproval?: boolean; quiet?: boolean },
   transport: MpTransport = tcpTransport,
 ): Promise<HostResult> {
   if (live?.appId === appId && live.role === 'host') {
@@ -964,7 +949,7 @@ export async function hostMultiplayer(
   await announce(live);
   await keepAlive(true);
   await hostAwake(true);
-  showHost(live);
+  if (!opts?.quiet) showHost(live);
   void watchBattery(live);
   console.log('[openscr-mp] Raum offen', room.roomCode, 'Adresse', ip, 'Port', server?.port);
   emit('multiplayer.players', { players: room.players(), selfId: room.hostId, roomCode: room.roomCode });
@@ -1169,6 +1154,11 @@ function queueGuestFrame(session: LiveSession, frame: WireFrame): { seq: number 
     return { seq: 0 };
   }
   throw new Error('Keine Verbindung zum Raum.');
+}
+
+export function multiplayerCodes(appId: string): { roomCode: string; qrPayload: string; gameUrl: string } {
+  const session = requireSession(appId);
+  return { roomCode: session.roomCode, qrPayload: session.qrPayload, gameUrl: session.gameUrl || '' };
 }
 
 export function showMultiplayerQr(

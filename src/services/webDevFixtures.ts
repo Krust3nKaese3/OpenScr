@@ -12,10 +12,44 @@ export interface FixtureTrack {
 }
 
 const TRACKS: FixtureTrack[] = [
-  { uri: 'spotify:track:dev-yellow', name: 'Gelbes U-Boot', artist: 'Dev Band', artists: ['Dev Band'], album: 'Fixtures', durationMs: 180000 },
-  { uri: 'spotify:track:dev-second', name: 'Zweiter Song', artist: 'Dev Band', artists: ['Dev Band'], album: 'Fixtures', durationMs: 210000 },
-  { uri: 'spotify:track:dev-third', name: 'Dritter Song', artist: 'Dev Band', artists: ['Dev Band'], album: 'Fixtures', durationMs: 195000 },
-];
+  ['Gelbes U-Boot', 180000],
+  ['Zweiter Song', 210000],
+  ['Dritter Song', 195000],
+  ['Mitternachtstaxi', 204000],
+  ['Rote Laterne', 176000],
+  ['Sommerregen', 221000],
+  ['Letzte Bahn', 198000],
+  ['Kupferdraht', 187000],
+  ['Fenster auf', 203000],
+  ['Kleine Stadt', 214000],
+  ['Nachtmarkt', 192000],
+  ['Papierboot', 168000],
+  ['Alte Jacke', 231000],
+  ['Grünes Licht', 189000],
+  ['Kalter Kaffee', 205000],
+  ['Dachterrasse', 217000],
+  ['Leiser Donner', 242000],
+  ['Straßenlaterne', 176000],
+  ['Offenes Fenster', 199000],
+  ['Kurze Nachricht', 163000],
+  ['Blaue Stunde', 228000],
+  ['Holztreppe', 184000],
+  ['Fernes Licht', 211000],
+  ['Taschenlampe', 193000],
+  ['Erste Reihe', 207000],
+  ['Lange Brücke', 236000],
+  ['Stiller Hafen', 188000],
+  ['Neue Schuhe', 174000],
+  ['Hohes Fenster', 201000],
+  ['Letzter Refrain', 219000],
+].map(([name, durationMs], index) => ({
+  uri: `spotify:track:devsample${String(index + 1).padStart(2, '0')}`,
+  name: String(name),
+  artist: 'Dev Band',
+  artists: ['Dev Band'],
+  album: 'Fixtures',
+  durationMs: Number(durationMs),
+}));
 
 const SPEAKER = {
   name: 'Dev-Lautsprecher',

@@ -64,9 +64,11 @@ import {
   resumeMultiplayer,
   sendMultiplayer,
   setDiscoverableMultiplayer,
+  multiplayerCodes,
   showMultiplayerQr,
   stopDiscoveryMultiplayer,
 } from '../services/multiplayer/session';
+import QRCode from 'qrcode';
 import { nativeDiscoveryPort } from '../services/multiplayer/mdnsPort';
 import { roomStore } from '../services/multiplayer/secureRoomStore';
 import { setHostKeepAlive } from '../services/multiplayer/hostKeepAlive';
@@ -481,7 +483,7 @@ export class NativeCapabilities {
   };
 
   multiplayer = {
-    host: (opts?: { maxPlayers?: number; name?: string; discoverable?: boolean; joinApproval?: boolean }) =>
+    host: (opts?: { maxPlayers?: number; name?: string; discoverable?: boolean; joinApproval?: boolean; quiet?: boolean }) =>
       hostMultiplayer(this.appId, (event, data) => this.eventEmitter.emit(event, data), opts),
     join: (input: string | { scan?: boolean; payload?: string; qrPayload?: string; name?: string; room?: string }) =>
       joinMultiplayer(this.appId, (event, data) => this.eventEmitter.emit(event, data), input),
@@ -492,6 +494,8 @@ export class NativeCapabilities {
     showWifiQr: () => showMultiplayerQr(this.appId, 'wifi'),
     showGameQr: () => showMultiplayerQr(this.appId, 'game'),
     showHotspotQr: () => showMultiplayerQr(this.appId, 'hotspot'),
+    codes: () => multiplayerCodes(this.appId),
+    qrDataUrl: (text: string) => QRCode.toDataURL(String(text || ''), { margin: 1, width: 280, color: { dark: '#0B0B0F', light: '#FFFFFF' } }),
     discover: () => discoverMultiplayer(this.appId, (event, data) => this.eventEmitter.emit(event, data)),
     stopDiscovery: () => stopDiscoveryMultiplayer(),
     setDiscoverable: (on: boolean) => setDiscoverableMultiplayer(this.appId, on),

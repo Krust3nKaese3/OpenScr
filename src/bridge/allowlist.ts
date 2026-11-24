@@ -245,6 +245,7 @@ function multiplayerHost(args: unknown[]): unknown[] {
     name: raw.name == null ? undefined : str(raw.name, 'Name', 24),
     discoverable: raw.discoverable == null ? undefined : bool(raw.discoverable, 'Sichtbar'),
     joinApproval: raw.joinApproval == null ? undefined : bool(raw.joinApproval, 'Zustimmung'),
+    quiet: raw.quiet == null ? undefined : bool(raw.quiet, 'Still'),
   }];
 }
 
@@ -413,6 +414,8 @@ const BRIDGE_METHODS: Record<string, MethodSpec> = {
   'multiplayer.showWifiQr': method({ category: 'multiplayer', action: 'showWifiQr', validate: none }),
   'multiplayer.showGameQr': method({ category: 'multiplayer', action: 'showGameQr', validate: none }),
   'multiplayer.showHotspotQr': method({ category: 'multiplayer', action: 'showHotspotQr', validate: none }),
+  'multiplayer.codes': method({ category: 'multiplayer', action: 'codes', validate: none }),
+  'multiplayer.qrDataUrl': method({ category: 'multiplayer', action: 'qrDataUrl', validate: (a) => (exact(a, 1, 1), [str(a[0], 'Text', 2000)]) }),
   'multiplayer.discover': method({ category: 'multiplayer', action: 'discover', rate: MP_ROOM_RATE, validate: none }),
   'multiplayer.stopDiscovery': method({ category: 'multiplayer', action: 'stopDiscovery', validate: none }),
   'multiplayer.setDiscoverable': method({ category: 'multiplayer', action: 'setDiscoverable', validate: (a) => (exact(a, 1, 1), [bool(a[0], 'Sichtbar')]) }),
