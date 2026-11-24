@@ -8,7 +8,7 @@ import { isStoredRelPath, normalizeEntrypoint } from './miniAppFiles';
 
 export type InstallMode = 'open' | 'catalog-only' | 'own-repos-only';
 
-const IOS_ALLOWED = new Set<string>(['storage', 'http', 'sensors', 'ble', 'vibration', 'screen', 'events']);
+const IOS_ALLOWED = new Set<string>(['storage', 'http', 'sensors', 'ble', 'vibration', 'screen', 'events', 'players']);
 
 export const IOS_CAPABILITY_ERROR =
   'Diese Funktion ist auf iOS nicht verfügbar. Erlaubt sind Speicher, Sensoren, HTTP, Bluetooth LE, Vibration und Bildschirm wachhalten.';

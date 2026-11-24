@@ -112,6 +112,10 @@ const MiniAppRunnerBase: React.FC<MiniAppRunnerProps> = ({ app, onClose, onLeave
     if (Platform.OS !== 'web') return undefined;
     const onMsg = (event: MessageEvent) => {
       const payload = event.data;
+      if (payload && payload.source === 'openscr-log') {
+        console.error(String(payload.message || ''));
+        return;
+      }
       if (!payload || payload.source !== 'openscr-miniapp' || typeof payload.data !== 'string') return;
       onBridgeMessage.current({ nativeEvent: { data: payload.data } } as WebViewMessageEvent);
     };
@@ -283,7 +287,9 @@ const MiniAppRunnerBase: React.FC<MiniAppRunnerProps> = ({ app, onClose, onLeave
       const entryDir = parentDir(entryRel);
       baseDirRef.current = entryDir;
       docRef.current = entryRel;
+      console.log('[openscr] lade', app.manifest.name, devFolderFor(app.id) ? 'aus Ordner ' + devFolderFor(app.id) : 'aus der Installation', entryRel);
       const fromFolder = await readDevAsset(app.id, entryRel);
+      console.log('[openscr] Einstieg', fromFolder?.text != null ? 'Ordner' : 'Installation', 'Länge', (fromFolder?.text || '').length);
       const htmlContent = fromFolder?.text != null ? fromFolder.text : await readAsStringAsync(entryUri);
       const cache = new Map<string, Promise<{ mime: string; base64: string; text: string | null } | null>>();
       const host = virtualHost(app.id);

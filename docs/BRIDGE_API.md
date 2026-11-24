@@ -29,6 +29,8 @@ Laute Aufrufe sind begrenzt, darunter Scans, HTTP, Sensoren, Benachrichtigungen 
 
 Speicher: `storage.get`, `storage.set`, `storage.remove`
 
+Spielernamen, gemeinsam für alle OpenScrapps auf diesem Gerät: `players.list`, `players.add({ name, tag })`, `players.update({ id, name, tag })`, `players.remove(id)`. Ein Eintrag ist ein Anzeigename aus 3 bis 16 Buchstaben oder Zahlen, Leerzeichen nur zwischen Wörtern, plus ein Tag aus 3 bis 5 Buchstaben oder Zahlen. Angezeigt wird `Name#Tag`. Die Kombination ist eindeutig, ohne Groß- und Kleinschreibung. Dafür ist keine Extra-Berechtigung nötig.
+
 Geheimnisse: `secrets.get`, `secrets.set`, `secrets.delete`, `secrets.list`, `secrets.info`
 
 HTTP: `http.request`, `http.fetch` (nur `http:` und `https:`)

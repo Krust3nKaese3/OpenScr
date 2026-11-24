@@ -4,7 +4,7 @@
  * `screen` hält nur die Anzeige wach und ist ohne Extra-Zustimmung erlaubt.
  * Andere Kategorien bleiben zustimmungspflichtig.
  */
-export const FREE_CATEGORIES: string[] = ['screen'];
+export const FREE_CATEGORIES: string[] = ['screen', 'players'];
 
 export type PermissionChoice = 'allow' | 'ask' | 'deny';
 

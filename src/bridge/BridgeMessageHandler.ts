@@ -126,6 +126,17 @@ export class BridgeMessageHandler {
   generateBridgeScript(): string {
     return `
       (function() {
+        window.addEventListener('error', function (event) {
+          var text = '[scrapp] ' + (event.message || 'Fehler') + ' @ ' + (event.filename || '') + ':' + (event.lineno || 0);
+          console.error(text, event.error || '');
+          try { parent.postMessage({ source: 'openscr-log', message: text }, '*'); } catch (err) {}
+        });
+        window.addEventListener('unhandledrejection', function (event) {
+          var reason = event.reason;
+          var text = '[scrapp] ' + (reason && reason.message ? reason.message : String(reason));
+          console.error(text, reason || '');
+          try { parent.postMessage({ source: 'openscr-log', message: text }, '*'); } catch (err) {}
+        });
         let messageId = 0;
         const pendingMessages = {};
         // SVG → white alpha-mask PNG data URL (96px) for tile icons
@@ -148,6 +159,12 @@ export class BridgeMessageHandler {
             get: (key) => sendMessage('storage.get', [key]),
             set: (key, value) => sendMessage('storage.set', [key, value]),
             remove: (key) => sendMessage('storage.remove', [key]),
+          },
+          players: {
+            list: () => sendMessage('players.list', []),
+            add: (input) => sendMessage('players.add', [input || {}]),
+            update: (input) => sendMessage('players.update', [input || {}]),
+            remove: (id) => sendMessage('players.remove', [id]),
           },
           secrets: {
             get: (key) => sendMessage('secrets.get', [key]),

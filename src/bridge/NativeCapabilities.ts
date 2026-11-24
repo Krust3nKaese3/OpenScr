@@ -73,6 +73,7 @@ import { nativeDiscoveryPort } from '../services/multiplayer/mdnsPort';
 import { roomStore } from '../services/multiplayer/secureRoomStore';
 import { setHostKeepAlive } from '../services/multiplayer/hostKeepAlive';
 import { setKeepAwake } from '../services/keepAwake';
+import { addPlayer, listPlayers, removePlayer, updatePlayer } from '../services/playerRoster';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -503,6 +504,13 @@ export class NativeCapabilities {
     denyJoin: (id: string) => denyJoin(this.appId, id),
     endRoom: () => endRoom(this.appId),
     resume: () => resumeMultiplayer(this.appId, (event, data) => this.eventEmitter.emit(event, data)),
+  };
+
+  players = {
+    list: () => listPlayers(),
+    add: (input: { name?: unknown; tag?: unknown }) => addPlayer(input?.name, input?.tag),
+    update: (input: { id?: unknown; name?: unknown; tag?: unknown }) => updatePlayer(input?.id, input?.name, input?.tag),
+    remove: (id: string) => removePlayer(id),
   };
 
   screen = {

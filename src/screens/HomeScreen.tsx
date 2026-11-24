@@ -26,6 +26,8 @@ import { LegalModal } from '../components/LegalModal';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { bundledBlocklistFile, bundledCatalogFile, loadPolicyLists } from '../services/remoteLists';
 import { devFolderFor, devFoldersEnabled, setDevFolder } from '../services/devFolder';
+import { PlayerNamesModal } from '../components/PlayerNamesModal';
+import { PlayerStatsModal } from '../components/PlayerStatsModal';
 
 const DEV_FOLDER_PLACEHOLDER = 'E:\\git_projects\\mobile_apps\\GuessTheSongScrapp';
 import {
@@ -78,6 +80,8 @@ export const HomeScreen: React.FC = () => {
   const [githubLogin, setGithubLogin] = useState<string | null>(null);
   const [showDeveloper, setShowDeveloper] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
+  const [showPlayers, setShowPlayers] = useState(false);
+  const [showStats, setShowStats] = useState(false);
   const [sourceApp, setSourceApp] = useState<MiniApp | null>(null);
   const dismissedUpdates = useRef<Set<string>>(new Set());
   const [repoUrl, setRepoUrl] = useState('');
@@ -625,16 +629,7 @@ export const HomeScreen: React.FC = () => {
       ) : (
         <>
           <View style={styles.header}>
-            {tab === 'add' ? wordmark(false) : (
-              <>
-                {wordmark(true)}
-                <TouchableOpacity onPress={() => setTab('settings')} accessibilityLabel="Konto" style={[styles.avatar, { backgroundColor: tokens.card, borderColor: tokens.line }]}>
-                  {githubLogin
-                    ? <Text style={[styles.avatarText, { color: tokens.text }]}>{githubLogin.slice(0, 1).toUpperCase()}</Text>
-                    : <NavGlyph name="settings" color={tokens.text} />}
-                </TouchableOpacity>
-              </>
-            )}
+            {wordmark(tab !== 'add')}
           </View>
 
           {tab === 'home' ? (
@@ -758,6 +753,12 @@ export const HomeScreen: React.FC = () => {
                   <Text style={[styles.settingText, { color: tokens.text }]}>{expandedFolders.has(folder.id) ? '▼' : '▶'} {folder.name}</Text>
                 </TouchableOpacity>
               ))}
+              <TouchableOpacity style={[styles.settingRow, { backgroundColor: tokens.card }]} onPress={() => setShowStats(true)}>
+                <Text style={[styles.settingText, { color: tokens.text }]}>Statistik</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.settingRow, { backgroundColor: tokens.card }]} onPress={() => setShowPlayers(true)}>
+                <Text style={[styles.settingText, { color: tokens.text }]}>Spielernamen</Text>
+              </TouchableOpacity>
               <TouchableOpacity style={[styles.settingRow, { backgroundColor: tokens.card }]} onPress={openDebugLog}>
                 <Text style={[styles.settingText, { color: tokens.text }]}>Debug-Log</Text>
               </TouchableOpacity>
@@ -875,6 +876,8 @@ export const HomeScreen: React.FC = () => {
         onChanged={() => { void refreshSession(); }}
       />
       <FirstOpenScrappModal visible={showGuide} onClose={() => setShowGuide(false)} />
+      <PlayerNamesModal visible={showPlayers} onClose={() => setShowPlayers(false)} />
+      <PlayerStatsModal visible={showStats} onClose={() => setShowStats(false)} />
       <SourceCodeModal app={sourceApp} visible={!!sourceApp} onClose={() => setSourceApp(null)} />
 
       <Modal visible={!!actionApp} transparent animationType="fade" onRequestClose={() => setActionApp(null)}>

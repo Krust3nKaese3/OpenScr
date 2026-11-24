@@ -30,6 +30,7 @@ Auf dem Gerät, nicht auf einem OpenScr-Server, liegen:
 - die heruntergeladenen Dateien der OpenScrapp und der Commit von `main`, der installiert wurde
 - erlaubte und abgelehnte Berechtigungen je OpenScrapp
 - der Speicher der OpenScrapp. Schlüssel beginnen mit `@miniapp_` und der Kennung der OpenScrapp. Andere OpenScrapps lesen diesen Speicher nicht. Ein Wert ist Text und höchstens 256 KiB
+- die gemeinsame Spielernamenliste auf diesem Gerät. Ein Eintrag ist Anzeigename und Tag, angezeigt als `Name#Tag`. Jede OpenScrapp kann diese Liste lesen und ändern. Sie hängt nicht an einer einzelnen OpenScrapp
 - Geheimnisse, die eine OpenScrapp ablegt. Liegt das Modul `expo-secure-store` im Build, stehen sie im gerätegeschützten Speicher, sonst im App-Speicher. Beim ersten Zugriff werden ältere Einträge dorthin übernommen
 - die Spotify-Client-ID, wenn du sie einträgst, und ein Spiegel derselben ID im App-Speicher
 - Zugriffs- und Aktualisierungstoken der Spotify-Web-API in den app-privaten Einstellungen unter dem Namen `everyapp_spotify`. Die OpenScrapp erhält diese Token nicht
