@@ -86,4 +86,4 @@ This follows the pattern Expo documents for Expo Go on a physical iPhone (https:
 
 Please do not read this note as claiming a public catalog under Guideline 4.7, universal links for each OpenScrapp, an age gate, or permission from Apple to expose native APIs beyond the list above.
 
-To review: sign in with a GitHub account you control, open “Dein erstes OpenScrapp”, and load a repository that account owns. A repository that account does not own will not install. Open Quelltext from the app menu or from the bar while it runs. A call such as a raw socket or a background task returns the German unavailable message.
+To review: sign in with a GitHub account you control, open “Deine erste OpenScrapp”, and load a repository that account owns. A repository that account does not own will not install. Open Quelltext from the app menu or from the bar while it runs. A call such as a raw socket or a background task returns the German unavailable message.

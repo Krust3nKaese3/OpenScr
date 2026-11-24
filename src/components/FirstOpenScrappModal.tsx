@@ -16,7 +16,7 @@ export const FirstOpenScrappModal: React.FC<FirstOpenScrappModalProps> = ({ visi
       <View style={styles.overlay}>
         <View style={styles.card}>
           <ScrollView>
-            <Text style={styles.title}>Dein erstes OpenScrapp</Text>
+            <Text style={styles.title}>Deine erste OpenScrapp</Text>
             <Text style={styles.body}>
               Ein OpenScrapp ist eine kleine Seite aus HTML und JavaScript in deinem eigenen GitHub-Repository.
               OpenScr lädt sie und führt sie auf diesem Gerät aus.

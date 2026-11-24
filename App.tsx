@@ -8,7 +8,13 @@ import { WebDevPanel } from './src/components/WebDevPanel';
 import { Platform } from 'react-native';
 
 function Shell() {
-  useContainerTheme();
+  const tokens = useContainerTheme();
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    document.documentElement.style.backgroundColor = tokens.bg;
+    document.body.style.backgroundColor = tokens.bg;
+    document.body.style.margin = '0';
+  }, [tokens.bg]);
   return (
     <>
       <StatusBar style={appearanceMode() === 'light' ? 'dark' : 'light'} />

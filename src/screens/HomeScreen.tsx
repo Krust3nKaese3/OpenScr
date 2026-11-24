@@ -7,6 +7,8 @@ import {
   TextInput,
   Modal,
   ScrollView,
+  ActivityIndicator,
+  Animated,
   Platform,
   useWindowDimensions,
 } from 'react-native';
@@ -24,6 +26,8 @@ import { LegalModal } from '../components/LegalModal';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { bundledBlocklistFile, bundledCatalogFile, loadPolicyLists } from '../services/remoteLists';
 import { devFolderFor, devFoldersEnabled, setDevFolder } from '../services/devFolder';
+
+const DEV_FOLDER_PLACEHOLDER = 'E:\\git_projects\\mobile_apps\\GuessTheSongScrapp';
 import {
   REPORT_EMAIL,
   blockReasonFor,
@@ -78,6 +82,12 @@ export const HomeScreen: React.FC = () => {
   const dismissedUpdates = useRef<Set<string>>(new Set());
   const [repoUrl, setRepoUrl] = useState('');
   const [loading, setLoading] = useState(false);
+  const [installingRepo, setInstallingRepo] = useState<string | null>(null);
+  const [revealId, setRevealId] = useState<string | null>(null);
+  const [tileTick, setTileTick] = useState(0);
+  const homeScrollRef = useRef<ScrollView>(null);
+  const tileY = useRef<Record<string, number>>({});
+  const bounce = useRef(new Animated.Value(1)).current;
   const [selectedApp, setSelectedApp] = useState<MiniApp | null>(null);
   const closeSelectedApp = useCallback(() => setSelectedApp(null), []);
   const [showFolderModal, setShowFolderModal] = useState(false);
@@ -167,7 +177,7 @@ export const HomeScreen: React.FC = () => {
       await loadData();
       if (source === 'field') setRepoUrl('');
       setTab('home');
-      notify('Hinzugefügt', `${app.manifest.name} wurde hinzugefügt.`);
+      setRevealId(app.id);
     } catch (error: any) {
       await refreshSession();
       notify('Fehler', error.message);
@@ -495,6 +505,20 @@ export const HomeScreen: React.FC = () => {
     setExpandedFolders(newExpanded);
   };
 
+  useEffect(() => {
+    if (tab !== 'home' || !revealId || tileY.current[revealId] == null) return undefined;
+    const y = tileY.current[revealId];
+    const frame = requestAnimationFrame(() => {
+      homeScrollRef.current?.scrollTo({ y: Math.max(0, y - 16), animated: true });
+      bounce.setValue(0.94);
+      Animated.sequence([
+        Animated.timing(bounce, { toValue: 1.08, duration: 160, useNativeDriver: false }),
+        Animated.spring(bounce, { toValue: 1, friction: 4, useNativeDriver: false }),
+      ]).start(() => setRevealId(null));
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [tab, revealId, tileTick, bounce]);
+
   const renderApp = (app: MiniApp) => {
     const blocked = blockReasonFor(app.id, app.repoUrl, blocklist);
     const access = accessFor(app);
@@ -502,16 +526,33 @@ export const HomeScreen: React.FC = () => {
     const latest = latestSha[app.id];
     const status = updateStatus(app.commitSha, latest);
     const folder = folders.find((item) => item.id === app.folderId);
+    const revealed = app.id === revealId;
     return (
-      <TouchableOpacity
+      <Animated.View
         key={app.id}
-        style={[styles.tile, { width: tileWidth, backgroundColor: tokens.card, opacity: locked ? 0.5 : 1 }]}
+        onLayout={(event) => {
+          tileY.current[app.id] = event.nativeEvent.layout.y;
+          if (app.id === revealId) setTileTick((tick) => tick + 1);
+        }}
+        style={{ width: tileWidth, transform: [{ scale: revealed ? bounce : 1 }] }}
+      >
+      <TouchableOpacity
+        style={[styles.tile, { width: '100%', backgroundColor: tokens.card, opacity: locked ? 0.5 : 1 }]}
         onPress={() => { void openApp(app); }}
         onLongPress={() => setActionApp(app)}
       >
         <View style={styles.tileTop}>
           <ScrappGlyph name={app.manifest.name} color={tokens.lime} card={tokens.card} />
-          {status === 'available' && !locked ? <View style={[styles.dot, { backgroundColor: tokens.lime }]} /> : null}
+          <View style={styles.tileActions}>
+            {status === 'available' && !locked ? <View style={[styles.dot, { backgroundColor: tokens.lime }]} /> : null}
+            <TouchableOpacity
+              accessibilityLabel="Optionen"
+              hitSlop={8}
+              onPress={() => setActionApp(app)}
+            >
+              <NavGlyph name="settings" color={tokens.muted} />
+            </TouchableOpacity>
+          </View>
         </View>
         <View>
           <Text style={[styles.tileName, { color: tokens.text }]} numberOfLines={2}>{app.manifest.name}</Text>
@@ -520,6 +561,7 @@ export const HomeScreen: React.FC = () => {
           {devFolderFor(app.id) ? <Text style={[styles.tileMeta, { color: tokens.lime }]} numberOfLines={1}>Lokaler Ordner</Text> : null}
         </View>
       </TouchableOpacity>
+      </Animated.View>
     );
   };
 
@@ -529,7 +571,7 @@ export const HomeScreen: React.FC = () => {
     <View style={[styles.wordRow, withApps ? styles.wordLeft : styles.wordCenter]}>
       <Text style={[styles.word, { color: tokens.text }]}>Open</Text>
       <Text style={[styles.word, { color: tokens.lime }]}>Scr</Text>
-      {withApps ? <Text style={[styles.appsLabel, { color: tokens.muted }]}>Apps</Text> : null}
+      {withApps ? <Text style={[styles.word, { color: tokens.muted }]}>apps</Text> : null}
     </View>
   );
 
@@ -545,13 +587,29 @@ export const HomeScreen: React.FC = () => {
             {blocked ? <Text style={[styles.tileMeta, { color: tokens.danger }]}>Gesperrt: {blocked}</Text> : (
               <TouchableOpacity
                 style={[styles.catalogButton, { borderColor: tokens.lime }]}
-                disabled={loading}
+                disabled={loading || installingRepo === entry.repoUrl}
                 onPress={() => {
-                  if (installed) void openApp(installed);
-                  else enqueue(() => performAdd(entry.repoUrl, 'link'));
+                  if (installed) {
+                    void openApp(installed);
+                    return;
+                  }
+                  setInstallingRepo(entry.repoUrl);
+                  enqueue(async () => {
+                    try {
+                      await performAdd(entry.repoUrl, 'link');
+                    } finally {
+                      setInstallingRepo((current) => current === entry.repoUrl ? null : current);
+                    }
+                  });
                 }}
               >
-                <Text style={[styles.catalogButtonText, { color: tokens.ink, backgroundColor: tokens.lime }]}>{installed ? 'Öffnen' : 'Installieren'}</Text>
+                {installingRepo === entry.repoUrl ? (
+                  <View style={[styles.catalogButtonText, { backgroundColor: tokens.lime }]}>
+                    <ActivityIndicator color={tokens.ink} />
+                  </View>
+                ) : (
+                  <Text style={[styles.catalogButtonText, { color: tokens.ink, backgroundColor: tokens.lime }]}>{installed ? 'Öffnen' : 'Installieren'}</Text>
+                )}
               </TouchableOpacity>
             )}
           </View>
@@ -567,28 +625,20 @@ export const HomeScreen: React.FC = () => {
       ) : (
         <>
           <View style={styles.header}>
-            {tab === 'add' ? (
-              <>
-                <TouchableOpacity onPress={() => { setScanning(false); setTab('home'); }} accessibilityLabel="Zurück" style={styles.iconHit}>
-                  <Text style={[styles.iconGlyph, { color: tokens.lime }]}>☰</Text>
-                </TouchableOpacity>
-                {wordmark(false)}
-                <TouchableOpacity onPress={() => setLegalDoc('privacy')} accessibilityLabel="Datenschutz" style={styles.iconHit}>
-                  <Text style={[styles.iconGlyph, { color: tokens.lime }]}>✓</Text>
-                </TouchableOpacity>
-              </>
-            ) : (
+            {tab === 'add' ? wordmark(false) : (
               <>
                 {wordmark(true)}
                 <TouchableOpacity onPress={() => setTab('settings')} accessibilityLabel="Konto" style={[styles.avatar, { backgroundColor: tokens.card, borderColor: tokens.line }]}>
-                  <Text style={[styles.avatarText, { color: tokens.text }]}>{githubLogin ? githubLogin.slice(0, 1).toUpperCase() : '·'}</Text>
+                  {githubLogin
+                    ? <Text style={[styles.avatarText, { color: tokens.text }]}>{githubLogin.slice(0, 1).toUpperCase()}</Text>
+                    : <NavGlyph name="settings" color={tokens.text} />}
                 </TouchableOpacity>
               </>
             )}
           </View>
 
           {tab === 'home' ? (
-            <ScrollView contentContainerStyle={styles.homeScroll} keyboardShouldPersistTaps="handled">
+            <ScrollView ref={homeScrollRef} contentContainerStyle={styles.homeScroll} keyboardShouldPersistTaps="handled">
               <View style={styles.grid}>
                 {apps.map(renderApp)}
               </View>
@@ -670,7 +720,7 @@ export const HomeScreen: React.FC = () => {
                   </Text>
                   {ownReposOnly ? (
                     <TouchableOpacity onPress={() => setShowGuide(true)}>
-                      <Text style={[styles.link, { color: tokens.lime }]}>Dein erstes OpenScrapp</Text>
+                      <Text style={[styles.link, { color: tokens.lime }]}>Deine erste OpenScrapp</Text>
                     </TouchableOpacity>
                   ) : null}
                   <TouchableOpacity onPress={() => setShowDeveloper(true)}>
@@ -695,7 +745,7 @@ export const HomeScreen: React.FC = () => {
                 <Text style={[styles.settingText, { color: tokens.text }]}>Nutzung</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.settingRow, { backgroundColor: tokens.card }]} onPress={() => setShowGuide(true)}>
-                <Text style={[styles.settingText, { color: tokens.text }]}>Dein erstes OpenScrapp</Text>
+                <Text style={[styles.settingText, { color: tokens.text }]}>Deine erste OpenScrapp</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.settingRow, { backgroundColor: tokens.card }]} onPress={() => setShowDeveloper(true)}>
                 <Text style={[styles.settingText, { color: tokens.text }]}>{githubLogin ? `Angemeldet als ${githubLogin}` : 'Mit GitHub anmelden'}</Text>
@@ -841,20 +891,17 @@ export const HomeScreen: React.FC = () => {
                   onChangeText={setFolderDraft}
                   autoCapitalize="none"
                   autoCorrect={false}
-                  placeholder="E:\git_projects\mobile_apps\GuessTheSongScrapp"
+                  placeholder={DEV_FOLDER_PLACEHOLDER}
                   placeholderTextColor={tokens.muted}
                   style={[styles.devFolderInput, { color: tokens.text, borderColor: tokens.line, backgroundColor: tokens.bg }]}
                 />
                 <TouchableOpacity
                   style={styles.sheetRow}
                   onPress={() => {
-                    setDevFolder(actionApp.id, folderDraft);
-                    notify(
-                      'Ordner',
-                      folderDraft.trim()
-                        ? 'Die App liest jetzt aus diesem Ordner.'
-                        : 'Kein Ordner eingetragen. Der GitHub-Stand wird wieder genutzt.',
-                    );
+                    const folder = folderDraft.trim() || DEV_FOLDER_PLACEHOLDER;
+                    setFolderDraft(folder);
+                    setDevFolder(actionApp.id, folder);
+                    notify('Ordner', 'Die App liest jetzt aus diesem Ordner.');
                     setActionApp(null);
                   }}
                 >
@@ -904,15 +951,13 @@ const styles = StyleSheet.create({
   wordLeft: { flex: 1, justifyContent: 'flex-start' },
   wordCenter: { flex: 1, justifyContent: 'center' },
   word: { fontSize: 28, fontWeight: '700', letterSpacing: -0.6 },
-  appsLabel: { fontSize: 15, marginLeft: 8, fontWeight: '500' },
   avatar: { width: 36, height: 36, borderRadius: 18, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   avatarText: { fontSize: 16, fontWeight: '700' },
-  iconHit: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  iconGlyph: { fontSize: 22, fontWeight: '700' },
   homeScroll: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 120 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
   tile: { borderRadius: 22, minHeight: 132, padding: 16, marginBottom: 12, justifyContent: 'space-between' },
-  tileTop: { flexDirection: 'row', justifyContent: 'space-between' },
+  tileTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  tileActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   tileName: { fontSize: 16, fontWeight: '600' },
   tileMeta: { fontSize: 12, marginTop: 4 },
   dot: { width: 8, height: 8, borderRadius: 4 },
