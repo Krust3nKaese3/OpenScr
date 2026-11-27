@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Modal, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, Modal, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Platform } from 'react-native';
 import { MiniApp } from '../types';
 import { loadSourceFiles } from '../services/sourceFiles';
+import { addonSourceEntries } from '../services/addons/inject';
+import { listAddons } from '../services/addons/store';
 
 interface SourceCodeModalProps {
   app: MiniApp | null;
@@ -22,10 +24,20 @@ export const SourceCodeModal: React.FC<SourceCodeModalProps> = ({ app, visible, 
     setError(null);
     setFiles([]);
     setSelected(0);
-    loadSourceFiles(app.localPath, app.manifest.entrypoint).then((list) => {
+    Promise.all([
+      loadSourceFiles(app.localPath, app.manifest.entrypoint),
+      listAddons(Platform.OS).catch(() => []),
+    ]).then(([list, addons]) => {
       if (!live) return;
-      setFiles(list);
-      if (!list.length) setError('Keine HTML- oder JavaScript-Datei gefunden.');
+      const extra = addonSourceEntries(addons, {
+        id: app.id,
+        repoUrl: app.repoUrl,
+        name: app.manifest.name,
+        version: app.manifest.version,
+      });
+      const merged = [...list, ...extra];
+      setFiles(merged);
+      if (!merged.length) setError('Keine HTML- oder JavaScript-Datei gefunden.');
     }).catch((err: { message?: string }) => {
       if (live) setError(err.message || 'Der Quelltext konnte nicht gelesen werden.');
     }).finally(() => {
@@ -41,7 +53,7 @@ export const SourceCodeModal: React.FC<SourceCodeModalProps> = ({ app, visible, 
       <View style={styles.overlay}>
         <View style={styles.card}>
           <Text style={styles.title}>Quelltext</Text>
-          <Text style={styles.hint}>Nur lesen. {app?.manifest.name}</Text>
+          <Text style={styles.hint}>Nur lesen. {app?.manifest.name}. Add-ons stehen unter addon/.</Text>
           {loading ? <ActivityIndicator style={{ marginVertical: 16 }} /> : null}
           {error ? <Text style={styles.error}>{error}</Text> : null}
           {files.length > 1 ? (

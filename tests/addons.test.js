@@ -1,9 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const { parseAddonManifest, versionAtLeast, scrappMatchesTarget, addonFitsScrapp } = require('../src/services/addons/manifest.ts');
-const { injectionForScrapp, activeAddonMarks } = require('../src/services/addons/inject.ts');
+const { injectionForScrapp, activeAddonMarks, addonSourceEntries } = require('../src/services/addons/inject.ts');
 const { downloadAddon } = require('../src/services/addons/download.ts');
-const { addonsAvailable } = require('../src/services/iosPolicy.ts');
+const { addonsAvailable, addonsRequireOwnRepo } = require('../src/services/iosPolicy.ts');
 
 test('addon.json wird geprüft und die Version verglichen', () => {
   const manifest = parseAddonManifest({
@@ -19,7 +19,9 @@ test('addon.json wird geprüft und die Version verglichen', () => {
   assert.strictEqual(versionAtLeast('1.2.0', '1.0.0'), true);
   assert.strictEqual(versionAtLeast('1.0', '1.0.1'), false);
   assert.throws(() => parseAddonManifest({ ...manifest, entry: '../x.js' }), /entry/);
-  assert.strictEqual(addonsAvailable('ios'), false);
+  assert.strictEqual(addonsAvailable('ios'), true);
+  assert.strictEqual(addonsRequireOwnRepo('ios'), true);
+  assert.strictEqual(addonsRequireOwnRepo('android'), false);
   assert.strictEqual(addonsAvailable('android'), true);
   assert.strictEqual(addonsAvailable('web'), true);
 });
@@ -70,6 +72,14 @@ test('ein Add-on trifft die OpenScrapp und läuft nach ihrem Code', () => {
   ], scrapp);
   assert.strictEqual(marks.shown.length, 3);
   assert.strictEqual(marks.extra, 1);
+  const source = addonSourceEntries([{
+    id: 'dance-tools', name: 'Dance', version: '1.0.0', icon: '♪',
+    targetScrapp: scrapp.id, minScrappVersion: '1.0.0', entry: 'main.js',
+    repoUrl: 'https://github.com/owner/dance-tools', commitSha: 'b', enabled: true,
+    files: { 'main.js': 'var started = 1;' },
+  }], scrapp);
+  assert.ok(source.some((file) => file.path === 'addon/dance-tools/main.js' && file.text.includes('started')));
+  assert.ok(source.some((file) => file.path === 'addon/dance-tools/addon.json'));
 });
 
 test('download prüft addon.json über einen Ersatz für fetch', async () => {
