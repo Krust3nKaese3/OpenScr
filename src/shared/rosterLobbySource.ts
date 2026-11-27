@@ -172,7 +172,7 @@ export const ROSTER_LOBBY_SOURCE = String.raw`
       + '<div class="orl-roster"></div>'
       + '<div class="orl-roles"></div>'
       + start
-      + '<button type="button" class="orl-link" data-act="stats">' + esc(model.statsLabel || 'Statistik') + '</button>'
+      + (model.statsLabel ? '<button type="button" class="orl-link" data-act="stats">' + esc(model.statsLabel) + '</button>' : '')
       + '<div class="orl-card">' + (model.rulesHtml || '') + '</div>'
       + '<div class="orl-modal" hidden><div class="orl-sheet" role="dialog" aria-modal="true"><p class="emoji"></p><h2></h2><p class="orl-team"></p><p class="orl-text"></p><button type="button" class="orl-btn" data-act="role-close">Schließen</button></div></div>'
       + '</div>';

@@ -3,6 +3,9 @@
  * Der Host spricht weiter das NDJSON-Protokoll. Der Browser bekommt dieselben Rahmen als WebSocket-Text.
  */
 import { scriptJson } from '../../bridge/scriptJson';
+import { GUEST_SHELL_SOURCE } from '../../shared/guestShellSource';
+import { QRCODE_BROWSER_SOURCE } from '../../shared/qrcodeBrowserSource';
+import { QR_SHELL_SOURCE } from '../../shared/qrShellSource';
 import { ROSTER_LOBBY_SOURCE } from '../../shared/rosterLobbySource';
 import { sameSecret } from './guard';
 
@@ -36,9 +39,16 @@ export function shareableGameUrl(url: string): string {
 
 const GUEST_ERROR_WATCH = `<script>(function(){function log(text){console.warn('[openscr-guest] '+text);}function broken(text){log(text);if(document.getElementById('openscr-guest-down'))return;var line=document.createElement('div');line.id='openscr-guest-down';line.setAttribute('style','position:fixed;left:12px;right:12px;bottom:12px;z-index:2147483647;background:rgba(28,20,12,.9);color:#fff;padding:8px 10px;border-radius:10px;font:13px/1.3 sans-serif');line.textContent='Spiel konnte nicht laden.';(document.body||document.documentElement).appendChild(line);}window.addEventListener('error',function(event){var el=event.target;if(el&&el!==window){var url=el.currentSrc||el.src||el.href||'';log('Datei nicht geladen: '+url);if(String(el.tagName||'').toLowerCase()==='script')broken(url||'Skript');return;}var where=event.filename?' ('+event.filename+':'+(event.lineno||0)+')':'';broken(String((event.error&&event.error.message)||event.message||'Skriptfehler')+where);},true);window.addEventListener('unhandledrejection',function(event){var reason=event.reason;broken(String((reason&&reason.message)||reason||'Promise abgelehnt'));});})();</script>`;
 
+const guestShellMeta = new Map<string, { name: string; repoUrl: string }>();
+
+export function setGuestShellMeta(appId: string, meta: { name: string; repoUrl: string }): void {
+  guestShellMeta.set(appId, { name: meta.name || '', repoUrl: meta.repoUrl || '' });
+}
+
 export function guestBootTags(token: string, appId: string, room: string): string {
-  const payload = scriptJson({ appId, room });
-  return `<base href="/g/${token}/">${GUEST_ERROR_WATCH}<script>window.__OPEN_SCR_GUEST__=${payload};</script><script>${ROSTER_LOBBY_SOURCE}</script><script src="openscr-guest.js"></script>`;
+  const meta = guestShellMeta.get(appId);
+  const payload = scriptJson({ appId, room, name: meta?.name || '', repoUrl: meta?.repoUrl || '' });
+  return `<base href="/g/${token}/">${GUEST_ERROR_WATCH}<script>window.__OPEN_SCR_GUEST__=${payload};</script><script>${QRCODE_BROWSER_SOURCE}</script><script>${ROSTER_LOBBY_SOURCE}</script><script>${QR_SHELL_SOURCE}</script><script>${GUEST_SHELL_SOURCE}</script><script src="openscr-guest.js"></script>`;
 }
 
 export function injectGuestDocument(html: string, token: string, appId: string, room: string): string {

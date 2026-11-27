@@ -52,12 +52,22 @@ export const QR_SHELL_SOURCE = String.raw`
     style.textContent = css;
     document.head.appendChild(style);
   }
+  function isGuest() {
+    if (model.viewer === 'guest') return true;
+    var bridge = window.OpenScrBridge || window.EveryAppBridge;
+    return !!(bridge && bridge.guest === true);
+  }
   function links() {
     if (!model.share) return '';
     return '<div class="oqr-row"><button type="button" class="oqr-btn ghost" data-qr="copy">' + (model.copied ? 'Kopiert' : 'Link kopieren') + '</button><button type="button" class="oqr-btn ghost" data-qr="share">Teilen</button></div>';
   }
   function hostBody() {
     if (model.open !== 'host') return '';
+    if (isGuest()) {
+      return (model.note ? '<p class="oqr-note">' + esc(model.note) + '</p>' : '')
+        + (model.image ? '<img alt="QR-Code" src="' + esc(model.image) + '">' : '')
+        + links();
+    }
     var hotspot = model.hostLink === 'hotspot';
     return '<div class="oqr-row">'
       + '<button type="button" class="oqr-btn' + (hotspot ? ' ghost' : ' solid') + '" data-qr="wlan">WLAN</button>'
@@ -90,10 +100,10 @@ export const QR_SHELL_SOURCE = String.raw`
   }
   function shell() {
     root.innerHTML = '<div class="oqr">'
-      + panel('scan', 'Code scannen', '')
+      + (isGuest() ? '' : panel('scan', 'Code scannen', ''))
       + panel('host', 'Host Multiplayer', hostBody())
       + panel('download', 'Download Scrap', downloadBody())
-      + requests()
+      + (isGuest() ? '' : requests())
       + '</div>';
   }
   function bind() {
@@ -107,6 +117,11 @@ export const QR_SHELL_SOURCE = String.raw`
       event.stopPropagation();
       var act = button.dataset.qr;
       var id = button.dataset.id;
+      if (isGuest() && act !== 'copy' && act !== 'share' && act !== 'host' && act !== 'download') return;
+      if (isGuest() && (act === 'host' || act === 'download')) {
+        if (handlers.onGuestPanel) handlers.onGuestPanel(act);
+        return;
+      }
       if (act === 'scan' && handlers.onScan) handlers.onScan();
       if (act === 'host' && handlers.onHost) handlers.onHost();
       if (act === 'download' && handlers.onDownload) handlers.onDownload();

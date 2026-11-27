@@ -28,6 +28,7 @@ import { learningPaneHeights, permissionsOfferedOnPlatform, showsLearningChrome 
 import { prepareAddonInjection } from '../services/addons/store';
 import { cancelMpScan, detachMultiplayer, dismissMpUi, endRoom, submitMpScan, subscribeMpUi, subscribeHostPresence, approveJoin, denyJoin, resumeMultiplayer, showMultiplayerQr, type HostPresence, type MpUiState } from '../services/multiplayer/session';
 import { setGuestContent } from '../services/multiplayer/guestContent';
+import { setGuestShellMeta } from '../services/multiplayer/guestHttp';
 import { applyShowOverLock, publishOverLockNotice, readShowOverLockMap, shouldShowOverLock, showOverLockEnabled, SHOW_OVER_LOCK_KEY } from '../services/showOverLock';
 import { stableWebViewHtml } from '../services/webViewSource';
 import { spotifyReconnectQuiet } from '../services/spotifySettings';
@@ -179,6 +180,7 @@ const MiniAppRunnerBase: React.FC<MiniAppRunnerProps> = ({ app, onClose, onLeave
     if (Platform.OS !== 'android' && Platform.OS !== 'web') return undefined;
     let entry = 'index.html';
     try { entry = normalizeEntrypoint(app.manifest.entrypoint); } catch { entry = 'index.html'; }
+    setGuestShellMeta(app.id, { name: app.manifest.name, repoUrl: app.repoUrl || '' });
     setGuestContent(app.id, {
       entry,
       list: async () => (await listDevFiles(app.id))?.files || listAppFiles(app.localPath),

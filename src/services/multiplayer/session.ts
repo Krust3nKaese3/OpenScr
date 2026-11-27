@@ -1419,6 +1419,7 @@ export async function resumeMultiplayer(
     return null;
   }
   if (saved.role === 'host') {
+    if (live && live.appId !== appId) return null;
     await hostMultiplayer(appId, emit, {
       name: saved.hostName,
       maxPlayers: saved.maxPlayers,
@@ -1428,7 +1429,7 @@ export async function resumeMultiplayer(
     const row = await activeStore().read(appId);
     return row ? publicResume(row, 'ready') : null;
   }
-  if (live && live.appId !== appId) throw new Error('Auf diesem Gerät läuft schon ein anderer Raum.');
+  if (live && live.appId !== appId) return null;
   const session = blankSession({
     appId,
     role: 'guest',
