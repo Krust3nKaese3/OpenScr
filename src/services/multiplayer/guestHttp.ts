@@ -339,15 +339,29 @@ export const GUEST_SHIM_SOURCE = `(function () {
   var giveUp = false;
   var resumeTimer = null;
   var pendingResume = null;
+  var earlyMessages = [];
 
   function emit(event, data) {
-    (listeners[event] || []).slice().forEach(function (cb) {
+    var list = listeners[event] || [];
+    if (event === 'multiplayer.message' && !list.length) {
+      earlyMessages.push(data);
+      if (earlyMessages.length > 30) earlyMessages.shift();
+      return;
+    }
+    list.slice().forEach(function (cb) {
       try { cb(data); } catch (err) {}
     });
   }
   function on(event, cb) {
     if (!listeners[event]) listeners[event] = [];
     listeners[event].push(cb);
+    if (event === 'multiplayer.message' && earlyMessages.length) {
+      var queued = earlyMessages.slice();
+      earlyMessages = [];
+      queued.forEach(function (data) {
+        try { cb(data); } catch (err) {}
+      });
+    }
     return function () { off(event, cb); };
   }
   function off(event, cb) {
@@ -476,6 +490,19 @@ export const GUEST_SHIM_SOURCE = `(function () {
       emit('multiplayer.players', { players: players, selfId: selfId, roomCode: roomCode });
       return;
     }
+    if (frame.t === 'names') {
+      settleNames(frame.names || []);
+      return;
+    }
+    if (frame.t === 'msg' && frame.data && frame.data.t === 'openscr-name-added') {
+      var pending = addWaiters[frame.data.req];
+      if (pending) {
+        delete addWaiters[frame.data.req];
+        if (frame.data.error) pending.reject(new Error(frame.data.error));
+        else pending.resolve(frame.data.player || null);
+      }
+      return;
+    }
     if (frame.t === 'msg') {
       emit('multiplayer.message', { from: frame.from, data: frame.data });
       return;
@@ -580,6 +607,16 @@ export const GUEST_SHIM_SOURCE = `(function () {
     connect();
     return new Promise(function (resolve, reject) { joinWaiters.push({ resolve: resolve, reject: reject }); });
   }
+  var names = null;
+  var nameWaiters = [];
+  var addWaiters = {};
+  function settleNames(rows) {
+    names = rows || [];
+    var waiting = nameWaiters;
+    nameWaiters = [];
+    waiting.forEach(function (resolve) { resolve(names); });
+    try { window.dispatchEvent(new CustomEvent('openscr-names', { detail: names })); } catch (error) { /* ältere WebView */ }
+  }
   var mp = {
     host: function () { return guestOnly(); },
     join: function (input) {
@@ -638,6 +675,8 @@ export const GUEST_SHIM_SOURCE = `(function () {
       return new Promise(function (resolve) { resumeWaiters.push(resolve); });
     },
     onMessage: function (cb) { return on('multiplayer.message', cb); },
+    onBinary: function (cb) { return on('multiplayer.binary', cb); },
+    onBinaryProgress: function (cb) { return on('multiplayer.binaryProgress', cb); },
     onPlayersChanged: function (cb) { return on('multiplayer.players', cb); },
     onJoinRequest: function (cb) { return on('multiplayer.joinRequest', cb); },
     onResumed: function (cb) { return on('multiplayer.resumed', cb); },
@@ -647,6 +686,30 @@ export const GUEST_SHIM_SOURCE = `(function () {
     guest: true,
     buildInfo: { environment: 'browser-guest', buildType: 'browser' },
     multiplayer: mp,
+    players: {
+      list: function () {
+        if (names) return Promise.resolve(names.slice());
+        return new Promise(function (resolve) {
+          nameWaiters.push(resolve);
+          setTimeout(function () { if (!names) settleNames([]); }, 4000);
+        });
+      },
+      add: function (input) {
+        var req = 'n' + Date.now().toString(36) + Math.floor(Math.random() * 1000).toString(36);
+        var row = input || {};
+        sendRaw({ t: 'msg', data: { t: 'openscr-name-add', req: req, name: String(row.name || ''), tag: String(row.tag || '') } });
+        return new Promise(function (resolve, reject) {
+          addWaiters[req] = { resolve: resolve, reject: reject };
+          setTimeout(function () {
+            if (!addWaiters[req]) return;
+            delete addWaiters[req];
+            reject(new Error('Der Host hat den Namen nicht gespeichert.'));
+          }, 8000);
+        });
+      },
+      update: function () { return guestOnly(); },
+      remove: function () { return guestOnly(); }
+    },
     events: { on: on, off: off },
     storage: null,
     secrets: stub(),

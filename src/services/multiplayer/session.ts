@@ -2,6 +2,8 @@
  * Eine Sitzung pro Gerät. Der Host verteilt JSON-Nachrichten nur innerhalb derselben OpenScrapp.
  */
 import { bytesToBase64, base64ByteLength, base64ToBytes, pushBinaryChunk, splitBytes, type BinarySlot } from '../binaryWire';
+import { listPlayers, addPlayer } from '../playerRoster';
+import { setRosterHook } from '../rosterSync';
 import { MP_LIMITS, PlayerView, assertPayload, decodeFrames, encodeFrame, playerName, type BinFrame, type WireFrame } from './protocol';
 import { decodeJoinUrl, encodeJoinUrl, isPrivateIPv4, type JoinTarget } from './qr';
 import { GameRoom, type RelayResult } from './room';
@@ -683,6 +685,45 @@ function finishAsk(session: LiveSession, id: string): PendingAsk | null {
   return ask;
 }
 
+function nameAdd(data: unknown): { req: string; name: string; tag: string } | null {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
+  const row = data as Record<string, unknown>;
+  if (row.t !== 'openscr-name-add') return null;
+  if (typeof row.req !== 'string' || typeof row.name !== 'string') return null;
+  return { req: row.req, name: row.name, tag: typeof row.tag === 'string' ? row.tag : '' };
+}
+
+async function saveGuestName(session: LiveSession, link: MpLink, added: { req: string; name: string; tag: string }): Promise<void> {
+  try {
+    const row = await addPlayer(added.name, added.tag);
+    link.send(encodeFrame({
+      t: 'msg',
+      from: session.selfId,
+      data: { t: 'openscr-name-added', req: added.req, player: { id: row.id, name: row.name, tag: row.tag || '' } },
+    }));
+  } catch (error) {
+    link.send(encodeFrame({
+      t: 'msg',
+      from: session.selfId,
+      data: { t: 'openscr-name-added', req: added.req, error: error instanceof Error ? error.message : 'Name nicht gespeichert.' },
+    }));
+  }
+}
+
+async function shareNames(session: LiveSession): Promise<void> {
+  if (session.role !== 'host') return;
+  const rows = await listPlayers();
+  const names = rows.slice(0, 100).map((row) => ({ id: row.id, name: row.name, tag: row.tag || '' }));
+  const text = encodeFrame({ t: 'names', names });
+  session.links.forEach((link) => {
+    if (link.browser) link.send(text);
+  });
+}
+
+setRosterHook(() => {
+  if (live?.role === 'host') void shareNames(live);
+});
+
 function admitLink(session: LiveSession, link: MpLink, playerId: string, secret: string): string {
   if (!session.room) return '';
   const previous = session.links.get(playerId);
@@ -699,6 +740,7 @@ function admitLink(session: LiveSession, link: MpLink, playerId: string, secret:
   if (link.browser && session.snapshot != null) {
     link.send(encodeFrame({ t: 'msg', from: session.selfId, data: session.snapshot, seq: session.snapshotSeq || 0 }));
   }
+  void shareNames(session);
   flushHeld(session, playerId, link);
   publishPlayers(session);
   void remember(session);
@@ -879,6 +921,11 @@ function bindHostLink(session: LiveSession, link: MpLink): void {
       return;
     }
     if (frame.t !== 'msg') return;
+    const added = nameAdd(frame.data);
+    if (added) {
+      void saveGuestName(session, link, added);
+      return;
+    }
     try {
       const result = frame.all
         ? session.room.broadcast(playerId, frame.data, at)
@@ -1398,6 +1445,11 @@ export async function denyJoin(appId: string, requestId: string): Promise<{ deni
   ask.link.send(encodeFrame({ t: 'error', code: 'denied', message: 'Der Host hat abgelehnt.' }));
   ask.link.close();
   return { denied: true };
+}
+
+export function liveMultiplayer(appId: string): { role: 'host' | 'guest'; roomCode: string } | null {
+  if (!live || live.appId !== appId || live.leaving || !live.welcomed) return null;
+  return { role: live.role, roomCode: live.roomCode };
 }
 
 export async function resumeMultiplayer(

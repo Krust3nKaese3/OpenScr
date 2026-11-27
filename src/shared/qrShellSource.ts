@@ -98,6 +98,16 @@ export const QR_SHELL_SOURCE = String.raw`
   function panel(act, label, body) {
     return '<div class="oqr-panel"><button type="button" class="oqr-btn oqr-main" data-qr="' + act + '"><span>' + label + '</span>' + icon + '</button>' + body + '</div>';
   }
+  function openHostIfLive() {
+    if (isGuest() || model.open || !handlers.onHost) return;
+    var bridge = window.OpenScrBridge || window.EveryAppBridge;
+    var mp = bridge && bridge.multiplayer;
+    if (!mp || typeof mp.live !== 'function') return;
+    Promise.resolve(mp.live()).then(function (row) {
+      if (!root || !row || row.role !== 'host' || model.open) return;
+      handlers.onHost();
+    }, function () {});
+  }
   function shell() {
     root.innerHTML = '<div class="oqr">'
       + (isGuest() ? '' : panel('scan', 'Code scannen', ''))
@@ -178,8 +188,10 @@ export const QR_SHELL_SOURCE = String.raw`
         reveal();
         return;
       }
+      var was = model.open;
       model = next || {};
       if (root) shell();
+      if (!model.open && was !== '') openHostIfLive();
     }
   };
 })();

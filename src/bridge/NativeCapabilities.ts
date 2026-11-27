@@ -61,6 +61,7 @@ import {
   hostMultiplayer,
   joinMultiplayer,
   leaveMultiplayer,
+  liveMultiplayer,
   resumeMultiplayer,
   sendMultiplayer,
   sendBinaryMultiplayer,
@@ -541,6 +542,7 @@ export class NativeCapabilities {
     approveJoin: (id: string) => approveJoin(this.appId, id),
     denyJoin: (id: string) => denyJoin(this.appId, id),
     endRoom: () => endRoom(this.appId),
+    live: () => liveMultiplayer(this.appId),
     resume: () => resumeMultiplayer(this.appId, (event, data) => this.eventEmitter.emit(event, data)),
   };
 

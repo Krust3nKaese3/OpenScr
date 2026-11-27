@@ -457,6 +457,7 @@ const BRIDGE_METHODS: Record<string, MethodSpec> = {
   'multiplayer.denyJoin': method({ category: 'multiplayer', action: 'denyJoin', validate: (a) => (exact(a, 1, 1), [str(a[0], 'Anfrage', 64)]) }),
   'multiplayer.endRoom': method({ category: 'multiplayer', action: 'endRoom', rate: MP_ROOM_RATE, validate: none }),
   'multiplayer.resume': method({ category: 'multiplayer', action: 'resume', rate: MP_ROOM_RATE, validate: none }),
+  'multiplayer.live': method({ category: 'multiplayer', action: 'live', validate: none }),
 
   'players.list': method({ category: 'players', action: 'list', validate: none }),
   'players.add': method({ category: 'players', action: 'add', validate: (a) => (exact(a, 1, 1), [plainObject(a[0], 'Spieler', 500)]) }),

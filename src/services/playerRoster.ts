@@ -3,6 +3,7 @@
  * A name is a display name plus a tag, like a League of Legends Riot ID.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { notifyRoster } from './rosterSync';
 
 const KEY = '@openscr_players_v1';
 const NAME = /^(?=[\p{L}\p{N}].{1,14}[\p{L}\p{N}]$)(?:[\p{L}\p{N}]+(?: [\p{L}\p{N}]+)*)$/u;
@@ -161,6 +162,7 @@ export async function addPlayer(name: unknown, tag: unknown): Promise<PlayerReco
   const row = { id: newId(), ...parts };
   rows.push(row);
   await writeAll(rows);
+  notifyRoster();
   return row;
 }
 
@@ -176,6 +178,7 @@ export async function updatePlayer(id: unknown, name: unknown, tag: unknown): Pr
   }
   rows[index] = { ...rows[index], id: playerId, name: parts.name, tag: parts.tag };
   await writeAll(rows);
+  notifyRoster();
   return rows[index];
 }
 
@@ -183,4 +186,5 @@ export async function removePlayer(id: unknown): Promise<void> {
   const playerId = String(id ?? '');
   const rows = await readAll();
   await writeAll(rows.filter((row) => row.id !== playerId));
+  notifyRoster();
 }

@@ -355,6 +355,7 @@ export class BridgeMessageHandler {
             approveJoin: (id) => sendMessage('multiplayer.approveJoin', [id]),
             denyJoin: (id) => sendMessage('multiplayer.denyJoin', [id]),
             endRoom: () => sendMessage('multiplayer.endRoom', []),
+            live: () => sendMessage('multiplayer.live', []),
             resume: () => sendMessage('multiplayer.resume', []),
             onMessage: (callback) => {
               window.OpenScrBridge.events.on('multiplayer.message', callback);

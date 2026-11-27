@@ -95,6 +95,7 @@ export type WireFrame =
   | AskFrame
   | { t: 'welcome'; playerId: string; secret: string; token?: string; roomId?: string; players: PlayerView[] }
   | { t: 'players'; players: PlayerView[] }
+  | { t: 'names'; names: { id: string; name: string; tag: string }[] }
   | MsgFrame
   | BinFrame
   | { t: 'ping'; ts: number }
@@ -102,7 +103,7 @@ export type WireFrame =
   | { t: 'leave' }
   | { t: 'error'; code: string; message: string };
 
-const TYPES = new Set(['hello', 'ask', 'welcome', 'players', 'msg', 'bin', 'ping', 'pong', 'leave', 'error']);
+const TYPES = new Set(['hello', 'ask', 'welcome', 'players', 'names', 'msg', 'bin', 'ping', 'pong', 'leave', 'error']);
 
 export function encodeFrame(frame: WireFrame): string {
   return `${JSON.stringify(frame)}\n`;
@@ -175,6 +176,19 @@ function asFrame(value: unknown): WireFrame | null {
     const players = asPlayers(row.players);
     if (!players) return null;
     return { t: 'players', players };
+  }
+  if (row.t === 'names') {
+    if (!Array.isArray(row.names) || row.names.length > 100) return null;
+    const names: { id: string; name: string; tag: string }[] = [];
+    for (const item of row.names) {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+      const entry = item as Record<string, unknown>;
+      if (!short(entry.id, 64) || !short(entry.name, 64)) return null;
+      if (entry.tag != null && typeof entry.tag !== 'string') return null;
+      if (typeof entry.tag === 'string' && entry.tag.length > 8) return null;
+      names.push({ id: entry.id, name: entry.name, tag: typeof entry.tag === 'string' ? entry.tag : '' });
+    }
+    return { t: 'names', names };
   }
   if (row.t === 'msg') {
     if (row.from != null && !short(row.from, 64)) return null;

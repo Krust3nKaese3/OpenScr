@@ -39,7 +39,10 @@ export const ROSTER_LOBBY_SOURCE = String.raw`
     + '.orl-sheet h2{margin:0;font-size:22px}'
     + '.orl-sheet p{margin:0;color:#d4d4d8;line-height:1.35}'
     + '.orl-team{color:#A3E635;font-weight:700}'
-    + '.orl-person{display:inline-flex;align-items:center;gap:4px;width:auto;max-width:100%;min-height:44px;padding:4px 4px 4px 12px;border-radius:999px;background:#1c1c22}'
+    + '.orl-person{display:inline-flex;align-items:center;gap:4px;width:auto;max-width:100%;min-height:44px;padding:4px 8px 4px 12px;border-radius:999px;background:#1c1c22}'
+    + '.orl-person.orl-self{box-shadow:inset 0 0 0 2px #A3E635}'
+    + '.orl-ok{color:#A3E635;font-weight:750;min-width:28px;text-align:center}'
+    + '.orl-me{border:0;background:transparent;color:#A3E635;font-weight:750;min-height:36px;padding:0 8px}'
     + '.orl-person .orl-x{width:32px;flex-basis:32px;border-radius:999px}'
     + '.orl details{color:#a1a1aa}'
     + '.orl summary{min-height:44px;display:flex;align-items:center;font-weight:700;color:#f4f4f5}'
@@ -47,6 +50,7 @@ export const ROSTER_LOBBY_SOURCE = String.raw`
 
   var root = null;
   var handlers = {};
+  var sharedNames = [];
   var model = { directory: [], seated: [], roles: [], query: '', startLabel: 'Spiel starten', startDisabled: true, statsLabel: 'Statistik', rulesHtml: '' };
   var creating = false;
   var bound = false;
@@ -73,7 +77,8 @@ export const ROSTER_LOBBY_SOURCE = String.raw`
   }
   function hits() {
     var needle = norm(model.query);
-    return (model.directory || []).filter(function (entry) {
+    var source = (model.directory && model.directory.length) ? model.directory : sharedNames;
+    return source.filter(function (entry) {
       if (!needle) return true;
       return norm(entry.label).indexOf(needle) >= 0;
     }).slice(0, 30);
@@ -134,7 +139,10 @@ export const ROSTER_LOBBY_SOURCE = String.raw`
     box.innerHTML = (model.seated || []).map(function (seat) {
       var locked = model.viewOnly || model.canRemove === false;
       var remove = locked ? '' : '<button type="button" class="orl-x" data-act="drop" data-id="' + esc(seat.id) + '" aria-label="' + esc(seat.label) + ' entfernen">✕</button>';
-      return '<div class="orl-person"' + (locked ? ' style="padding-right:12px"' : '') + '><span>' + esc(seat.label) + '</span>' + remove + '</div>';
+      var mark = seat.connected ? '<span class="orl-ok" aria-label="Verbunden">✓</span>' : '';
+      var mine = seat.claimable && !seat.connected ? '<button type="button" class="orl-me" data-act="mine" data-id="' + esc(seat.id) + '">Ich</button>' : '';
+      var self = seat.self ? ' orl-self' : '';
+      return '<div class="orl-person' + self + '"' + (locked && !mark ? ' style="padding-right:12px"' : '') + '><span>' + esc(seat.label) + '</span>' + mine + mark + remove + '</div>';
     }).join('');
     var start = root.querySelector('[data-act="start"]');
     if (start) start.disabled = !!model.startDisabled;
@@ -197,7 +205,7 @@ export const ROSTER_LOBBY_SOURCE = String.raw`
     bound = true;
     document.addEventListener('pointerdown', function (event) {
       if (!root || !root.contains(event.target)) return;
-      var button = event.target.closest && event.target.closest('[data-act="pick"],[data-act="drop"],[data-act="role"]');
+      var button = event.target.closest && event.target.closest('[data-act="pick"],[data-act="drop"],[data-act="role"],[data-act="mine"]');
       press = button || null;
       moved = false;
       if (!button) return;
@@ -219,6 +227,11 @@ export const ROSTER_LOBBY_SOURCE = String.raw`
         setTimeout(function () {
           if (handlers.onRemove) handlers.onRemove(button.dataset.id);
         }, 140);
+        return;
+      }
+      if (act === 'mine' && handlers.onMine) {
+        handlers.onMine(button.dataset.id);
+        setTimeout(function () { button.classList.remove('pressed'); }, 160);
         return;
       }
       if (act === 'role') {
@@ -253,7 +266,7 @@ export const ROSTER_LOBBY_SOURCE = String.raw`
       var button = event.target.closest && event.target.closest('[data-act]');
       if (!button || button.tagName === 'FORM') return;
       var act = button.dataset.act;
-      if (act === 'pick' || act === 'drop' || act === 'role') { event.preventDefault(); event.stopPropagation(); return; }
+      if (act === 'pick' || act === 'drop' || act === 'role' || act === 'mine') { event.preventDefault(); event.stopPropagation(); return; }
       event.preventDefault();
       event.stopPropagation();
       if (act === 'new') { creating = true; shell(); }
@@ -277,14 +290,30 @@ export const ROSTER_LOBBY_SOURCE = String.raw`
     }, true);
   }
 
+  function loadShared() {
+    var bridge = window.OpenScrBridge || window.EveryAppBridge;
+    if (!bridge || !bridge.players || typeof bridge.players.list !== 'function') return;
+    var apply = function (rows) {
+      sharedNames = (rows || []).map(function (row) {
+        var tag = row && row.tag ? String(row.tag) : '';
+        var name = row && row.name ? String(row.name) : '';
+        return { id: String(row && row.id || ''), label: tag ? name + '#' + tag : name };
+      }).filter(function (entry) { return entry.id && entry.label; });
+      if (root && !(model.directory && model.directory.length)) paintSuggest();
+    };
+    bridge.players.list().then(apply, function () {});
+    window.addEventListener('openscr-names', function (event) { apply(event.detail || []); });
+  }
+
   window.OpenScrRoster = {
     attach: function (el, next) {
       install();
       root = el;
       handlers = next || {};
-      bind();
-      shell();
-    },
+    bind();
+    loadShared();
+    shell();
+  },
     setModel: function (next) {
       model = next || model;
       if (!root) return;
