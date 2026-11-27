@@ -29,6 +29,7 @@ import {
   readAddonGithubToken,
   writeAddonGithubToken,
 } from '../services/addons/githubToken';
+import { devAddonPrefill } from '../services/addons/devPrefill';
 
 export const AddonSheet: React.FC<{
   platform: string;
@@ -38,7 +39,7 @@ export const AddonSheet: React.FC<{
   onChanged: () => void;
 }> = ({ platform, scrapp, tokens, onClose, onChanged }) => {
   const [rows, setRows] = useState<CachedAddon[]>([]);
-  const [repo, setRepo] = useState('');
+  const [repo, setRepo] = useState(() => devAddonPrefill(scrapp.id));
   const [tokenOpen, setTokenOpen] = useState(false);
   const [token, setToken] = useState('');
   const [hasToken, setHasToken] = useState(false);
