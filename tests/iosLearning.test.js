@@ -106,7 +106,7 @@ test('iOS bridge allows the learning set and rejects sockets, macros, tiles and 
   for (const method of [
     'storage.set', 'http.fetch', 'http.request', 'sensors.getAccelerometer', 'ble.scan', 'vibration.vibrate',
     'clipboard.setString', 'clipboard.getString', 'share.text', 'share.exportFile',
-    'camera.takePicture', 'camera.scanQr', 'notifications.schedule',
+    'camera.takePicture', 'camera.scanQr', 'notifications.schedule', 'net.fetch',
   ]) {
     assert.strictEqual(assessBridgeCall('ios', method), null, method);
     assert.strictEqual(assessBridgeCall('android', method), null, method);

@@ -401,6 +401,33 @@ export const GUEST_SHIM_SOURCE = `(function () {
     if (!welcomed) return;
     while (outbox.length) socketSend(outbox.shift());
   }
+  var bins = {};
+  function takeBin(frame) {
+    var id = String(frame.id || '');
+    var slot = bins[id];
+    if (!slot || slot.n !== frame.n) slot = bins[id] = { n: frame.n, parts: [], got: 0 };
+    if (slot.parts[frame.i] == null) { slot.parts[frame.i] = frame.b; slot.got += 1; }
+    emit('multiplayer.binaryProgress', { id: id, from: frame.from, received: slot.got, total: frame.n });
+    if (slot.got !== frame.n) return;
+    var bytes = [];
+    for (var i = 0; i < slot.n; i++) {
+      var bin = atob(slot.parts[i] || '');
+      for (var j = 0; j < bin.length; j++) bytes.push(bin.charCodeAt(j) & 255);
+    }
+    delete bins[id];
+    emit('multiplayer.binary', { id: id, from: frame.from, bytes: new Uint8Array(bytes) });
+  }
+  function u8ToB64(bytes) {
+    var alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+    var out = '';
+    for (var i = 0; i < bytes.length; i += 3) {
+      var a = bytes[i], b = i + 1 < bytes.length ? bytes[i + 1] : 0, c = i + 2 < bytes.length ? bytes[i + 2] : 0;
+      var n = (a << 16) | (b << 8) | c;
+      out += alphabet[(n >> 18) & 63] + alphabet[(n >> 12) & 63];
+      out += (i + 1 < bytes.length ? alphabet[(n >> 6) & 63] : '=') + (i + 2 < bytes.length ? alphabet[n & 63] : '=');
+    }
+    return out;
+  }
   function sendRaw(frame) {
     var text = JSON.stringify(frame);
     if (frame.t !== 'hello' && !welcomed) { rememberOut(text); return; }
@@ -441,6 +468,10 @@ export const GUEST_SHIM_SOURCE = `(function () {
     }
     if (frame.t === 'msg') {
       emit('multiplayer.message', { from: frame.from, data: frame.data });
+      return;
+    }
+    if (frame.t === 'bin') {
+      takeBin(frame);
       return;
     }
     if (frame.t === 'ping') {
@@ -552,6 +583,24 @@ export const GUEST_SHIM_SOURCE = `(function () {
     broadcast: function (data) {
       sendRaw({ t: 'msg', all: true, data: data });
       return Promise.resolve({ seq: 0 });
+    },
+    sendBinary: function (opts) {
+      opts = opts || {};
+      var bytes = opts.bytes instanceof Uint8Array ? opts.bytes : new Uint8Array(opts.bytes || []);
+      if (opts.base64 && !opts.bytes) {
+        var bin = atob(opts.base64);
+        bytes = new Uint8Array(bin.length);
+        for (var k = 0; k < bin.length; k++) bytes[k] = bin.charCodeAt(k) & 255;
+      }
+      if (bytes.length > 262144) return Promise.reject(new Error('Binärdaten sind zu groß (höchstens 256 KiB).'));
+      var chunk = 12000;
+      var n = Math.ceil(bytes.length / chunk);
+      var id = String(opts.id || 'bin');
+      for (var i = 0; i < n; i++) {
+        var slice = bytes.subarray(i * chunk, Math.min(bytes.length, (i + 1) * chunk));
+        sendRaw({ t: 'bin', id: id, i: i, n: n, b: u8ToB64(slice), to: opts.to, all: opts.to ? undefined : true });
+      }
+      return Promise.resolve({ id: id, chunks: n, byteLength: bytes.length });
     },
     leave: function () {
       sendRaw({ t: 'leave' });

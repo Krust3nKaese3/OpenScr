@@ -39,6 +39,14 @@ export function showsLearningChrome(platform: string): boolean {
   return isIosLearningPlatform(platform);
 }
 
+/**
+ * Add-ons existieren nur auf Android und in der Web-Entwicklungsumgebung.
+ * Auf iOS gibt es keinen Codepfad, der sie anzeigt, lädt oder einsetzt.
+ */
+export function addonsAvailable(platform: string): boolean {
+  return platform === 'android' || platform === 'web';
+}
+
 /** Running code uses at most 80% of the available height. The bar keeps the rest. */
 export function learningPaneHeights(availableHeight: number): { bar: number; code: number } {
   const height = Number.isFinite(availableHeight) && availableHeight > 0 ? availableHeight : 0;

@@ -20,6 +20,8 @@ Danach gilt:
 
 Es gibt auf iOS keinen Katalog und keine Liste „Empfohlen“. `catalog/catalog.json` und jede andere ferne Datei können das nicht einschalten. Die Entscheidung ist `Platform.OS === 'ios'` im Programm (`src/services/iosPolicy.ts`).
 
+Add-ons gibt es auf iOS nicht. `addonsAvailable` in `src/services/iosPolicy.ts` ist auf iOS falsch. Die Oberfläche zum Hinzufügen, der Download, der Zwischenspeicher und das Einsetzen von Add-on-Code laufen dann nicht. Ein Add-on ist kein verstecktes iOS-Feature.
+
 „Melden“ öffnet eine E-Mail. Die Sperrliste kann ein Repository deaktivieren und nennt den Grund. Es gibt keinen OpenScr-Server.
 
 ## Quelltext und Entwicklungsumgebung
@@ -33,7 +35,7 @@ Während eine OpenScrapp läuft, bleibt die Leiste „Entwicklungsumgebung · ei
 Die OpenScrapp erreicht das Gerät nur über die Allowlist. Auf iOS sind das:
 
 - Speicher: `storage.get`, `storage.set`, `storage.remove`
-- HTTP: `http.fetch`, `http.request` (nur `http:` und `https:`)
+- HTTP: `http.fetch`, `http.request`, `net.fetch` (nur `http:` und `https:`; `net.fetch` ist derselbe HTTP-Zugriff ohne CORS, mit Größen- und Zeitgrenze, Antwort als Text, Base64 oder Base64-Stücke)
 - Sensoren: `sensors.getAccelerometer`, `sensors.getGyroscope`
 - Bluetooth LE: `ble.isAvailable`, `ble.scan`, `ble.connect`, `ble.disconnect`, `ble.write`, `ble.read`, `ble.notify`
 - Vibration, solange die OpenScrapp sichtbar ist: `vibration.vibrate`
@@ -80,9 +82,11 @@ A repository is installed only when both the owner in the URL and `owner.login` 
 
 The iOS app has no curated catalog and no “Empfohlen” list. `catalog/catalog.json` cannot enable catalog installs. The choice is `Platform.OS === 'ios'` in `src/services/iosPolicy.ts`. “Melden” opens an email. A blocklist can still disable a repository and show the reason. There is no OpenScr account server.
 
+Add-ons are not available on iOS. `addonsAvailable` in `src/services/iosPolicy.ts` is false there, so the app does not show add-on settings, does not download add-on repositories, and does not inject add-on code.
+
 The user can read the fetched HTML and JavaScript (the entry file first) from the app menu and from the development bar. The view is read-only. While an OpenScrapp runs, a persistent bar says “Entwicklungsumgebung · eigener Code” and offers Back and Source. The page uses at most 80% of the screen height.
 
-iOS bridge methods are storage, HTTP fetch, accelerometer and gyroscope, Bluetooth LE, vibration, clipboard (`clipboard.setString`, `clipboard.getString`), share sheet (`share.text`, `share.exportFile`), camera (`camera.takePicture`, `camera.scanQr`), local notifications (`notifications.schedule`), and the `app.start` event. Each category needs one-time consent except the event channel and keeping the screen awake. `share.exportFile` writes only into the app cache and then opens the system share sheet so the person can save the file, for example to Files. The camera is a visible full-screen preview with a shutter and cancel. A photo is returned as a data URI. A QR scan returns the scanned string. Photos are not saved to the photo library. There is no photo picker, no `expo-image-picker`, and no `expo-media-library`. The microphone is not used. `notifications.schedule` calls `requestPermissionsAsync` first, prefixes the title with the OpenScrapp name, and those scheduled notifications are cancelled when that OpenScrapp is deleted. Push is not enabled: `plugins/withoutIosPush.js` removes `aps-environment` and is listed before the notifications plugin. The app does not expose a general file system, contacts, or location. Calls to raw TCP/UDP, Tuya, background tasks, macros, tiles, popups, classic Bluetooth, Spotify, media keys, Wi-Fi info, secrets, crypto, and multiplayer return a German error and do not run. A remote file cannot add those methods back.
+iOS bridge methods are storage, HTTP fetch (`http.fetch`, `http.request`, `net.fetch`), accelerometer and gyroscope, Bluetooth LE, vibration, clipboard (`clipboard.setString`, `clipboard.getString`), share sheet (`share.text`, `share.exportFile`), camera (`camera.takePicture`, `camera.scanQr`), local notifications (`notifications.schedule`), and the `app.start` event. `net.fetch` is the same allowed HTTP category: the device performs the request, so a page origin does not apply CORS. The response is capped at 1.5 MiB and 60 seconds. Audio cutting, file picking, and binary multiplayer are not part of this iOS bridge. Each category needs one-time consent except the event channel and keeping the screen awake. `share.exportFile` writes only into the app cache and then opens the system share sheet so the person can save the file, for example to Files. The camera is a visible full-screen preview with a shutter and cancel. A photo is returned as a data URI. A QR scan returns the scanned string. Photos are not saved to the photo library. There is no photo picker, no `expo-image-picker`, and no `expo-media-library`. The microphone is not used. `notifications.schedule` calls `requestPermissionsAsync` first, prefixes the title with the OpenScrapp name, and those scheduled notifications are cancelled when that OpenScrapp is deleted. Push is not enabled: `plugins/withoutIosPush.js` removes `aps-environment` and is listed before the notifications plugin. The app does not expose a general file system, contacts, or location. Calls to raw TCP/UDP, Tuya, background tasks, macros, tiles, popups, classic Bluetooth, Spotify, media keys, Wi-Fi info, secrets, crypto, and multiplayer return a German error and do not run. A remote file cannot add those methods back.
 
 Android is a different build: a catalog, public repositories after a warning, and the longer bridge. This note is about iOS.
 

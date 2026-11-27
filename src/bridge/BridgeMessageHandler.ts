@@ -6,6 +6,7 @@ import { NativeCapabilities } from './NativeCapabilities';
 import { BRIDGE_EVENTS, RATE_LIMIT_ERROR, bridgeMethod, parseBridgeMessage, takeRate } from './allowlist';
 import { setJoinRequestOwnedByApp } from '../services/multiplayer/session';
 import { scriptJson } from './scriptJson';
+import { webviewExtrasScript } from '../services/webviewExtras';
 
 export type ConsentAsk = (category: Permission) => Promise<boolean>;
 
@@ -123,7 +124,25 @@ export class BridgeMessageHandler {
     return await method.apply(handler, args);
   }
 
-  generateBridgeScript(): string {
+  generateBridgeScript(platform = 'android'): string {
+    const binaryApi = platform === 'ios' ? '' : `
+            sendBinary: (opts) => {
+              opts = opts || {};
+              var bytes = opts.bytes;
+              var base64 = opts.base64;
+              if (!base64 && bytes) base64 = window.__openscrBytesToBase64(bytes);
+              return sendMessage('multiplayer.sendBinary', [{ id: String(opts.id || ''), to: opts.to, base64: base64 }]);
+            },
+            onBinary: (callback) => {
+              const wrapped = (payload) => callback(Object.assign({}, payload, { bytes: window.__openscrBase64ToBytes(payload.base64 || '') }));
+              window.OpenScrBridge.events.on('multiplayer.binary', wrapped);
+              return () => window.OpenScrBridge.events.off('multiplayer.binary', wrapped);
+            },
+            onBinaryProgress: (callback) => {
+              window.OpenScrBridge.events.on('multiplayer.binaryProgress', callback);
+              return () => window.OpenScrBridge.events.off('multiplayer.binaryProgress', callback);
+            },`;
+    const extras = platform === 'ios' ? '' : webviewExtrasScript();
     return `
       (function() {
         window.addEventListener('error', function (event) {
@@ -286,6 +305,7 @@ export class BridgeMessageHandler {
             tuyaStatus: (cfg) => sendMessage('net.tuyaStatus', [cfg]),
             tuyaSet: (cfg, dps) => sendMessage('net.tuyaSet', [cfg, dps]),
             tuyaDiscover: (ms) => sendMessage('net.tuyaDiscover', [ms]),
+            fetch: (url, options) => sendMessage('net.fetch', [url, options || {}]),
           },
           crypto: {
             isAvailable: () => sendMessage('crypto.isAvailable', []),
@@ -318,6 +338,7 @@ export class BridgeMessageHandler {
             join: (input) => sendMessage('multiplayer.join', [input]),
             send: (data, opts) => sendMessage('multiplayer.send', opts ? [data, opts] : [data]),
             broadcast: (data) => sendMessage('multiplayer.broadcast', [data]),
+            ${binaryApi}
             leave: () => sendMessage('multiplayer.leave', []),
             showQr: () => sendMessage('multiplayer.showQr', []),
             showWifiQr: () => sendMessage('multiplayer.showWifiQr', []),
@@ -388,6 +409,7 @@ export class BridgeMessageHandler {
           },
         };
         window.EveryAppBridge = window.OpenScrBridge;
+        ${extras}
 
         window.dispatchBridgeEvent = function(event, data) {
           const listeners = eventListeners[event];

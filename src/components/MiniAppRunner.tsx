@@ -25,6 +25,7 @@ import { SourceCodeModal } from './SourceCodeModal';
 import { CameraCaptureOverlay } from './CameraCaptureOverlay';
 import { cancelCameraCapture } from '../services/cameraCapture';
 import { learningPaneHeights, permissionsOfferedOnPlatform, showsLearningChrome } from '../services/iosPolicy';
+import { prepareAddonInjection } from '../services/addons/store';
 import { cancelMpScan, detachMultiplayer, dismissMpUi, endRoom, submitMpScan, subscribeMpUi, subscribeHostPresence, approveJoin, denyJoin, resumeMultiplayer, showMultiplayerQr, type HostPresence, type MpUiState } from '../services/multiplayer/session';
 import { setGuestContent } from '../services/multiplayer/guestContent';
 import { applyShowOverLock, publishOverLockNotice, readShowOverLockMap, shouldShowOverLock, showOverLockEnabled, SHOW_OVER_LOCK_KEY } from '../services/showOverLock';
@@ -77,6 +78,8 @@ const MiniAppRunnerBase: React.FC<MiniAppRunnerProps> = ({ app, onClose, onLeave
   const capabilitiesRef = useRef<NativeCapabilities | null>(null);
   const [error, setError] = useState<{ message: string; stack?: string } | null>(null);
   const [showSource, setShowSource] = useState(false);
+  const [addonIcons, setAddonIcons] = useState<{ id: string; name: string; icon: string }[]>([]);
+  const [addonError, setAddonError] = useState('');
   const learning = showsLearningChrome(Platform.OS);
   // One-shot height. A live window subscription would re-render when the keyboard opens.
   const panes = learningPaneHeights(Dimensions.get('window').height);
@@ -313,8 +316,24 @@ const MiniAppRunnerBase: React.FC<MiniAppRunnerProps> = ({ app, onClose, onLeave
         }
       }
       const bridgeHandler = new BridgeMessageHandler(app.id, grantedRef.current, capabilitiesRef.current);
-      const bridgeScript = bridgeHandler.generateBridgeScript();
+      const bridgeScript = bridgeHandler.generateBridgeScript(Platform.OS);
       const hashLine = hash ? `location.hash=${JSON.stringify(hash)};` : '';
+      let addonScript = '';
+      try {
+        const prepared = await prepareAddonInjection(Platform.OS, {
+          id: app.id,
+          repoUrl: app.repoUrl,
+          name: app.manifest.name,
+          version: app.manifest.version,
+        });
+        addonScript = prepared.script;
+        setAddonIcons(prepared.icons);
+        setAddonError(prepared.errors.map((item) => `${item.name}: ${item.message}`).filter(Boolean).join('\n'));
+      } catch (addonFailure) {
+        const message = addonFailure instanceof Error ? addonFailure.message : 'Add-on fehlgeschlagen.';
+        setAddonIcons([]);
+        setAddonError(message);
+      }
 
       const webBridge = Platform.OS === 'web'
         ? `window.ReactNativeWebView=window.ReactNativeWebView||{postMessage:function(data){parent.postMessage({source:'openscr-miniapp',data:String(data)},'*');}};`
@@ -336,6 +355,7 @@ const MiniAppRunnerBase: React.FC<MiniAppRunnerProps> = ({ app, onClose, onLeave
           ${assetRuntimeSource(host)}
           ${hashLine}</script>
           ${rewritten}
+          ${addonScript}
         </body>
         </html>
       `;
@@ -605,6 +625,21 @@ const MiniAppRunnerBase: React.FC<MiniAppRunnerProps> = ({ app, onClose, onLeave
           </View>
         </View>
       )}
+      {addonIcons.length ? (
+        <View style={styles.addonBar} pointerEvents="none">
+          {addonIcons.map((item) => (
+            <Text key={item.id} style={styles.addonIcon} accessibilityLabel={item.name}>{item.icon}</Text>
+          ))}
+        </View>
+      ) : null}
+      {addonError ? (
+        <View style={styles.addonError}>
+          <Text selectable style={styles.addonErrorText}>{addonError}</Text>
+          <TouchableOpacity onPress={() => { void Clipboard.setStringAsync(addonError); }}>
+            <Text style={styles.addonCopy}>Kopieren</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
       {Platform.OS === 'android' && hostPresence && !mpUi ? (
         <TouchableOpacity
           onPress={() => { try { showMultiplayerQr(app.id); } catch { /* Der Raum ist schon zu. */ } }}
@@ -690,6 +725,20 @@ const styles = StyleSheet.create({
     backgroundColor: '#0B0B0F',
   },
   navWrap: { position: 'absolute', left: 0, right: 0, bottom: 22, alignItems: 'center', zIndex: 20 },
+  addonBar: {
+    position: 'absolute', left: 12, right: 12, bottom: 78, zIndex: 18,
+    flexDirection: 'row', justifyContent: 'center', gap: 8,
+  },
+  addonIcon: {
+    backgroundColor: 'rgba(15,17,21,0.82)', color: '#fff', overflow: 'hidden',
+    minWidth: 28, textAlign: 'center', borderRadius: 14, paddingHorizontal: 8, paddingVertical: 4, fontSize: 16,
+  },
+  addonError: {
+    position: 'absolute', left: 12, right: 12, bottom: 112, zIndex: 19,
+    backgroundColor: 'rgba(28,20,12,0.92)', borderRadius: 10, padding: 8,
+  },
+  addonErrorText: { color: '#fff', fontSize: 12 },
+  addonCopy: { color: '#9ad0ff', fontWeight: '700', marginTop: 4 },
   navRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   navPill: { flexDirection: 'row', borderRadius: 28, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 10, justifyContent: 'space-between' },
   subPill: { borderWidth: 1, paddingHorizontal: 8 },

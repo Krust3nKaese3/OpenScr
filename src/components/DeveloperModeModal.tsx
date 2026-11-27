@@ -1,8 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, Modal, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator, Alert, Linking, ScrollView } from 'react-native';
+import { View, Text, Modal, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator, Alert, Linking, ScrollView, Platform } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { GithubSession } from '../services/GithubSession';
 import { githubOAuthClientId } from '../services/developerMode';
+import { addonsAvailable } from '../services/iosPolicy';
+import { AddonSettings } from './AddonSettings';
 
 const TOKEN_INFO =
   'Ein persönliches Token ist ein langes Passwort, das du selbst auf GitHub erzeugst. Du brauchst es nur, wenn die Anmeldung mit Code nicht klappt. Erzeugen: GitHub → Settings → Developer settings → Personal access tokens → Fine-grained token, nur Lesezugriff auf deine Repositories (Contents: Read-only). Das Token bleibt nur auf diesem Gerät gespeichert.';
@@ -199,6 +201,7 @@ export const DeveloperModeModal: React.FC<DeveloperModeModalProps> = ({ visible,
               </TouchableOpacity>
             ) : null}
             {status ? <Text style={styles.hint}>{status}</Text> : null}
+            {addonsAvailable(Platform.OS) ? <AddonSettings platform={Platform.OS} /> : null}
             {busy ? <ActivityIndicator style={{ marginTop: 12 }} /> : null}
           </ScrollView>
           <TouchableOpacity style={styles.secondary} onPress={onClose}>
