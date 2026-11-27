@@ -12,7 +12,7 @@ Dateien der OpenScrapp selbst liest die WebView nur innerhalb ihres eigenen Ordn
 
 ## Zustimmung
 
-Jede Kategorie außer dem reinen Event-Kanal braucht eine einmalige Zustimmung pro OpenScrapp. Sie wird unter `@everyapp_permissions` bzw. `@everyapp_permission_denied` gespeichert und kann unter „Info und Berechtigungen“ widerrufen werden. Steht die Funktion im Manifest, fragt OpenScr beim ersten Öffnen. Sonst beim ersten Aufruf.
+Jede Kategorie außer dem reinen Event-Kanal, `screen`, `players` und `songHistory` braucht eine einmalige Zustimmung pro OpenScrapp. Sie wird unter `@everyapp_permissions` bzw. `@everyapp_permission_denied` gespeichert und kann unter „Info und Berechtigungen“ widerrufen werden. Steht die Funktion im Manifest, fragt OpenScr beim ersten Öffnen. Sonst beim ersten Aufruf.
 
 ## Speicher
 
@@ -30,6 +30,8 @@ Laute Aufrufe sind begrenzt, darunter Scans, HTTP, Sensoren, Benachrichtigungen 
 Speicher: `storage.get`, `storage.set`, `storage.remove`
 
 Spielernamen, gemeinsam für alle OpenScrapps auf diesem Gerät: `players.list`, `players.add({ name, tag })`, `players.update({ id, name, tag })`, `players.remove(id)`. Ein Eintrag ist ein Anzeigename aus 3 bis 16 Buchstaben oder Zahlen, Leerzeichen nur zwischen Wörtern, plus ein Tag aus 3 bis 5 Buchstaben oder Zahlen. Angezeigt wird `Name#Tag`. Die Kombination ist eindeutig, ohne Groß- und Kleinschreibung. Dafür ist keine Extra-Berechtigung nötig.
+
+Zuletzt gespielte Songs, ebenfalls gemeinsam und ohne Extra-Berechtigung: `songHistory.add({ title, artist? })`, `songHistory.list({ source?, excludeSelf?, sinceMs? })`, `songHistory.sources()`, `songHistory.clear()`. Der Host schreibt Quelle und Zeitpunkt. Das Fenster sind die letzten 24 Stunden, nicht der Kalendertag. Beispiel und Grenzen stehen in [BRIDGE_NEUTRAL.md](BRIDGE_NEUTRAL.md).
 
 Geheimnisse: `secrets.get`, `secrets.set`, `secrets.delete`, `secrets.list`, `secrets.info`
 
@@ -77,7 +79,7 @@ Events (nur diese Namen): `app.start`, `bluetooth.connected`, `bluetooth.disconn
 
 Auf iOS ist die Bridge kürzer. Die Auswahl steht in `src/services/iosPolicy.ts` und hängt an der Plattform des Builds. Eine ferne Datei kann sie nicht erweitern.
 
-Erlaubt: `storage.get`, `storage.set`, `storage.remove`, `http.request`, `http.fetch`, `net.fetch`, `sensors.getAccelerometer`, `sensors.getGyroscope`, `ble.isAvailable`, `ble.scan`, `ble.connect`, `ble.disconnect`, `ble.write`, `ble.read`, `ble.notify`, `vibration.vibrate`, `screen.keepAwake`, `clipboard.setString`, `clipboard.getString`, `share.text`, `share.exportFile`, `camera.takePicture`, `camera.scanQr`, `notifications.schedule`, dazu das Event `app.start`. `net.fetch` gehört zur Kategorie `http`. Audio, Dateiauswahl und `multiplayer.sendBinary` sind auf iOS nicht eingesetzt. Add-ons auf iOS folgen der Besitzregel für eigene Repositories, siehe [ADDONS.md](ADDONS.md).
+Erlaubt: `storage.get`, `storage.set`, `storage.remove`, `http.request`, `http.fetch`, `net.fetch`, `sensors.getAccelerometer`, `sensors.getGyroscope`, `ble.isAvailable`, `ble.scan`, `ble.connect`, `ble.disconnect`, `ble.write`, `ble.read`, `ble.notify`, `vibration.vibrate`, `screen.keepAwake`, `clipboard.setString`, `clipboard.getString`, `share.text`, `share.exportFile`, `camera.takePicture`, `camera.scanQr`, `notifications.schedule`, `songHistory.add`, `songHistory.list`, `songHistory.sources`, `songHistory.clear`, dazu das Event `app.start`. `net.fetch` gehört zur Kategorie `http`. Audio, Dateiauswahl und `multiplayer.sendBinary` sind auf iOS nicht eingesetzt. Add-ons auf iOS folgen der Besitzregel für eigene Repositories, siehe [ADDONS.md](ADDONS.md).
 
 Nicht verfügbar, mit der Meldung „Diese Funktion ist auf iOS nicht verfügbar…“: Roh-Sockets und Tuya (`net.*`), Hintergrundaufgaben und Makros (`background.*`), Kacheln (`tiles.*`), Popups (`popup.*`), klassisches Bluetooth, Spotify, Medientasten, WLAN-Info, Geheimnisse, Kryptografie, Mehrspieler und die Fotomediathek. Es gibt kein `expo-image-picker` und kein `expo-media-library`. Android behält die volle Liste oben, einschließlich der neuen Teilen- und Kamera-Methoden.
 

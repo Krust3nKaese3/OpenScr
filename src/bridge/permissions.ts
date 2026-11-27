@@ -2,9 +2,10 @@
  * Every native capability needs a per-mini-app decision.
  * `events` is only the subscription channel; each event name has its own permission.
  * `screen` hält nur die Anzeige wach und ist ohne Extra-Zustimmung erlaubt.
+ * `songHistory` ist eine gemeinsame Songliste auf dem Gerät, ebenfalls ohne Extra-Zustimmung.
  * Andere Kategorien bleiben zustimmungspflichtig.
  */
-export const FREE_CATEGORIES: string[] = ['screen', 'players'];
+export const FREE_CATEGORIES: string[] = ['screen', 'players', 'songHistory'];
 
 export type PermissionChoice = 'allow' | 'ask' | 'deny';
 

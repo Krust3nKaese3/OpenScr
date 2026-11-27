@@ -21,9 +21,10 @@ const SCAN_RATE: RateRule = { max: 3, windowMs: 20_000 };
 const SENSOR_RATE: RateRule = { max: 10, windowMs: 10_000 };
 const NOTIFY_RATE: RateRule = { max: 5, windowMs: 60_000 };
 const NET_RATE: RateRule = { max: 12, windowMs: 10_000 };
+const SONG_ADD_RATE: RateRule = { max: 30, windowMs: 60_000 };
 
 export interface MethodSpec {
-  category: Permission | 'events' | 'screen' | 'players';
+  category: Permission | 'events' | 'screen' | 'players' | 'songHistory';
   action: string;
   rate: RateRule;
   validate: (args: unknown[]) => unknown[];
@@ -288,6 +289,25 @@ function multiplayerBroadcast(args: unknown[]): unknown[] {
   return [boundedJson(args[0], 'Nachricht', 32 * 1024)];
 }
 
+function songAdd(args: unknown[]): unknown[] {
+  exact(args, 1, 1);
+  const raw = plainObject(args[0], 'Song', 4000);
+  const title = str(raw.title, 'Titel', 400);
+  const artist = raw.artist == null ? undefined : str(raw.artist, 'Künstler', 400);
+  return [{ title, artist }];
+}
+
+function songList(args: unknown[]): unknown[] {
+  exact(args, 0, 1);
+  if (args[0] == null) return [{}];
+  const raw = plainObject(args[0], 'Filter', 4000);
+  return [{
+    source: raw.source == null ? undefined : str(raw.source, 'Quelle', 160),
+    excludeSelf: raw.excludeSelf == null ? undefined : bool(raw.excludeSelf, 'excludeSelf'),
+    sinceMs: raw.sinceMs == null ? undefined : num(raw.sinceMs, 'sinceMs', 0, 1e15, true),
+  }];
+}
+
 function multiplayerBinary(args: unknown[]): unknown[] {
   exact(args, 1, 1);
   const raw = plainObject(args[0], 'Binärdaten', 400_000);
@@ -458,6 +478,11 @@ const BRIDGE_METHODS: Record<string, MethodSpec> = {
   'multiplayer.endRoom': method({ category: 'multiplayer', action: 'endRoom', rate: MP_ROOM_RATE, validate: none }),
   'multiplayer.resume': method({ category: 'multiplayer', action: 'resume', rate: MP_ROOM_RATE, validate: none }),
   'multiplayer.live': method({ category: 'multiplayer', action: 'live', validate: none }),
+
+  'songHistory.add': method({ category: 'songHistory', action: 'add', rate: SONG_ADD_RATE, validate: songAdd }),
+  'songHistory.list': method({ category: 'songHistory', action: 'list', validate: songList }),
+  'songHistory.sources': method({ category: 'songHistory', action: 'sources', validate: none }),
+  'songHistory.clear': method({ category: 'songHistory', action: 'clear', validate: none }),
 
   'players.list': method({ category: 'players', action: 'list', validate: none }),
   'players.add': method({ category: 'players', action: 'add', validate: (a) => (exact(a, 1, 1), [plainObject(a[0], 'Spieler', 500)]) }),

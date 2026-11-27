@@ -10,7 +10,7 @@ export type InstallMode = 'open' | 'catalog-only' | 'own-repos-only';
 
 const IOS_ALLOWED = new Set<string>([
   'storage', 'http', 'sensors', 'ble', 'vibration', 'screen', 'events',
-  'clipboard', 'share', 'camera', 'notifications', 'players',
+  'clipboard', 'share', 'camera', 'notifications', 'players', 'songHistory',
 ]);
 
 export const IOS_CAPABILITY_ERROR =

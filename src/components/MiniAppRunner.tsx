@@ -331,7 +331,7 @@ const MiniAppRunnerBase: React.FC<MiniAppRunnerProps> = ({ app, onClose, onLeave
       });
 
       if (!capabilitiesRef.current) {
-        capabilitiesRef.current = new NativeCapabilities(app.id);
+        capabilitiesRef.current = new NativeCapabilities(app.id, { name: app.manifest.name, repoUrl: app.repoUrl });
         if (grantedRef.current.includes('multiplayer')) {
           void resumeMultiplayer(app.id, (event, data) => capabilitiesRef.current?.eventEmitter.emit(event, data));
         }
@@ -465,7 +465,7 @@ const MiniAppRunnerBase: React.FC<MiniAppRunnerProps> = ({ app, onClose, onLeave
       }
       
       if (!capabilitiesRef.current) {
-        capabilitiesRef.current = new NativeCapabilities(app.id);
+        capabilitiesRef.current = new NativeCapabilities(app.id, { name: app.manifest.name, repoUrl: app.repoUrl });
       }
 
       const bridgeHandler = new BridgeMessageHandler(

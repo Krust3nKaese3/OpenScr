@@ -378,6 +378,12 @@ export class BridgeMessageHandler {
               return () => window.OpenScrBridge.events.off('multiplayer.hostAway', callback);
             },
           },
+          songHistory: {
+            add: (input) => sendMessage('songHistory.add', [input || {}]),
+            list: (query) => sendMessage('songHistory.list', query ? [query] : []),
+            sources: () => sendMessage('songHistory.sources', []),
+            clear: () => sendMessage('songHistory.clear', []),
+          },
           keepAwake: {
             acquire: () => sendMessage('screen.keepAwake', [true]),
             release: () => sendMessage('screen.keepAwake', [false]),
