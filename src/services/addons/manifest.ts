@@ -72,22 +72,28 @@ export function addonFitsScrapp(
   }
 }
 
+/**
+ * Gemeinsamer Schlüssel für targetScrapp und die OpenScrapp:
+ * trimmen, kleinschreiben, Leerzeichen und Unterstriche zu '-', mehrfache Bindestriche zusammenziehen.
+ */
+export function normalizeScrappTarget(value: string): string {
+  return value.trim().toLowerCase().replace(/[\s_]+/g, '-').replace(/-+/g, '-');
+}
+
 export function scrappMatchesTarget(
   target: string,
   app: { id: string; repoUrl: string; name: string },
 ): boolean {
-  const want = target.trim().toLowerCase();
+  const want = normalizeScrappTarget(target);
   if (!want) return false;
-  if (want === app.id.toLowerCase()) return true;
-  if (want === app.name.trim().toLowerCase()) return true;
+  const keys = [app.id, app.name];
   try {
     const { owner, repo } = parseGitHubRepo(app.repoUrl);
-    const slug = `${owner}/${repo}`.toLowerCase();
-    if (want === slug || want === repo.toLowerCase() || want === owner.toLowerCase()) return true;
+    keys.push(`${owner}/${repo}`, repo);
   } catch {
     /* ohne GitHub-URL bleibt der Vergleich bei id und Name */
   }
-  return false;
+  return keys.some((key) => normalizeScrappTarget(key) === want);
 }
 
 function needString(value: unknown, label: string, max: number): string {

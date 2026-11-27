@@ -18,7 +18,7 @@ Add-ons gibt es auf Android, auf iOS und in der Web-Entwicklungsumgebung. Androi
 }
 ```
 
-`targetScrapp` trifft die OpenScrapp, wenn der Wert die App-Id, `owner/repo`, der Repository-Name oder der Name aus `openscr.json` ist. Groß- und Kleinschreibung spielt keine Rolle. `minScrappVersion` wird mit `manifest.version` verglichen. Ist die OpenScrapp älter, läuft ihr Code weiter und das Add-on liefert eine kopierbare Fehlermeldung.
+`targetScrapp` trifft die OpenScrapp, wenn der Wert nach derselben Normalisierung einem dieser Texte gleicht: der App-Id, `owner/repo`, dem Repository-Namen oder dem Anzeigenamen (`name` aus `openscr.json`). Die Normalisierung trimmt, schreibt klein, ersetzt Leerzeichen und Unterstriche durch `-` und zieht aufeinanderfolgende Bindestriche zu einem zusammen. `imposter-dance` trifft damit `Imposter Dance` und `imposter_dance`. `ImposterDanceScrapp` trifft das Repository `ImposterDanceScrapp`. Dieselbe Funktion gilt beim Hinzufügen, beim Update, beim Einsetzen und bei den Zeichen auf der Karte. `minScrappVersion` wird mit `manifest.version` verglichen. Ist die OpenScrapp älter, läuft ihr Code weiter und das Add-on liefert eine kopierbare Fehlermeldung.
 
 `entry` ist ein relativer Pfad auf eine `.js`-Datei. Weitere JavaScript-Dateien im Repository werden davor, in sortierter Reihenfolge, eingesetzt. Höchstens 24 Dateien, 256 KiB pro Datei, 1 MiB insgesamt.
 

@@ -40,6 +40,40 @@ test('ein Add-on trifft die OpenScrapp und läuft nach ihrem Code', () => {
   const scrapp = { id: 'github_com_owner_app', repoUrl: 'https://github.com/owner/ImposterDanceScrapp', name: 'Imposter', version: '1.0.0' };
   assert.strictEqual(scrappMatchesTarget('owner/ImposterDanceScrapp', scrapp), true);
   assert.strictEqual(scrappMatchesTarget('other/nope', scrapp), false);
+  const dance = {
+    id: 'github_com_krust3nkaese3_imposterdancescrapp',
+    repoUrl: 'https://github.com/Krust3nKaese3/ImposterDanceScrapp',
+    name: 'Imposter Dance',
+    version: '1.0.0',
+  };
+  assert.strictEqual(scrappMatchesTarget('imposter-dance', dance), true);
+  assert.strictEqual(scrappMatchesTarget('Imposter  Dance', dance), true);
+  assert.strictEqual(scrappMatchesTarget('imposter_dance', dance), true);
+  assert.strictEqual(scrappMatchesTarget('imposter--dance', dance), true);
+  assert.strictEqual(scrappMatchesTarget('ImposterDanceScrapp', dance), true);
+  assert.strictEqual(scrappMatchesTarget('Krust3nKaese3/ImposterDanceScrapp', dance), true);
+  assert.strictEqual(scrappMatchesTarget('github-com-krust3nkaese3-imposterdancescrapp', dance), true);
+  assert.strictEqual(scrappMatchesTarget('other-scrapp', dance), false);
+  const danceHit = injectionForScrapp([{
+    id: 'dance-tools',
+    name: 'Dance',
+    version: '1.0.0',
+    icon: '♪',
+    targetScrapp: 'imposter-dance',
+    minScrappVersion: '1.0.0',
+    entry: 'main.js',
+    repoUrl: 'https://github.com/Krust3nKaese3/ImpostorDanceYoutube',
+    commitSha: 'c'.repeat(40),
+    enabled: true,
+    files: { 'main.js': 'globalThis.dance = 1;' },
+  }], dance);
+  assert.ok(danceHit.script.includes('globalThis.dance'));
+  assert.strictEqual(danceHit.icons[0].icon, '♪');
+  assert.strictEqual(activeAddonMarks([{
+    id: 'dance-tools', name: 'Dance', version: '1.0.0', icon: '♪',
+    targetScrapp: 'imposter-dance', minScrappVersion: '1.0.0', entry: 'main.js',
+    repoUrl: 'https://github.com/Krust3nKaese3/ImpostorDanceYoutube', commitSha: 'c', enabled: true, files: {},
+  }], dance).shown.length, 1);
   const built = injectionForScrapp([{
     id: 'dance-tools',
     name: 'Dance',
