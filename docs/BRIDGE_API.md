@@ -33,7 +33,7 @@ Spielernamen, gemeinsam für alle OpenScrapps auf diesem Gerät: `players.list`,
 
 Geheimnisse: `secrets.get`, `secrets.set`, `secrets.delete`, `secrets.list`, `secrets.info`
 
-HTTP: `http.request`, `http.fetch` (nur `http:` und `https:`)
+HTTP: `http.request`, `http.fetch`, `net.fetch` (nur `http:` und `https:`). `net.fetch` läuft auf der React-Native-Seite. Grenzen und die Audio- und Binärfunktionen stehen in [BRIDGE_NEUTRAL.md](BRIDGE_NEUTRAL.md). Add-ons stehen in [ADDONS.md](ADDONS.md).
 
 Bluetooth: `bluetooth.scan`, `bluetooth.connect`, `bluetooth.disconnect`, `bluetooth.getConnectedDevices`
 
@@ -77,7 +77,7 @@ Events (nur diese Namen): `app.start`, `bluetooth.connected`, `bluetooth.disconn
 
 Auf iOS ist die Bridge kürzer. Die Auswahl steht in `src/services/iosPolicy.ts` und hängt an der Plattform des Builds. Eine ferne Datei kann sie nicht erweitern.
 
-Erlaubt: `storage.get`, `storage.set`, `storage.remove`, `http.request`, `http.fetch`, `sensors.getAccelerometer`, `sensors.getGyroscope`, `ble.isAvailable`, `ble.scan`, `ble.connect`, `ble.disconnect`, `ble.write`, `ble.read`, `ble.notify`, `vibration.vibrate`, `screen.keepAwake`, `clipboard.setString`, `clipboard.getString`, `share.text`, `share.exportFile`, `camera.takePicture`, `camera.scanQr`, `notifications.schedule`, dazu das Event `app.start`.
+Erlaubt: `storage.get`, `storage.set`, `storage.remove`, `http.request`, `http.fetch`, `net.fetch`, `sensors.getAccelerometer`, `sensors.getGyroscope`, `ble.isAvailable`, `ble.scan`, `ble.connect`, `ble.disconnect`, `ble.write`, `ble.read`, `ble.notify`, `vibration.vibrate`, `screen.keepAwake`, `clipboard.setString`, `clipboard.getString`, `share.text`, `share.exportFile`, `camera.takePicture`, `camera.scanQr`, `notifications.schedule`, dazu das Event `app.start`. `net.fetch` gehört zur Kategorie `http`. Audio, Dateiauswahl und `multiplayer.sendBinary` sind auf iOS nicht eingesetzt. Add-ons gibt es auf iOS nicht, siehe [ADDONS.md](ADDONS.md).
 
 Nicht verfügbar, mit der Meldung „Diese Funktion ist auf iOS nicht verfügbar…“: Roh-Sockets und Tuya (`net.*`), Hintergrundaufgaben und Makros (`background.*`), Kacheln (`tiles.*`), Popups (`popup.*`), klassisches Bluetooth, Spotify, Medientasten, WLAN-Info, Geheimnisse, Kryptografie, Mehrspieler und die Fotomediathek. Es gibt kein `expo-image-picker` und kein `expo-media-library`. Android behält die volle Liste oben, einschließlich der neuen Teilen- und Kamera-Methoden.
 

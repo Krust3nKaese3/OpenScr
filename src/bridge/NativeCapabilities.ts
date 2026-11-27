@@ -63,12 +63,14 @@ import {
   leaveMultiplayer,
   resumeMultiplayer,
   sendMultiplayer,
+  sendBinaryMultiplayer,
   setDiscoverableMultiplayer,
   multiplayerCodes,
   showMultiplayerQr,
   stopDiscoveryMultiplayer,
 } from '../services/multiplayer/session';
 import QRCode from 'qrcode';
+import { performNetFetch } from '../services/netFetch';
 import { nativeDiscoveryPort } from '../services/multiplayer/mdnsPort';
 import { roomStore } from '../services/multiplayer/secureRoomStore';
 import { setHostKeepAlive } from '../services/multiplayer/hostKeepAlive';
@@ -213,6 +215,8 @@ export class NativeCapabilities {
         body,
       };
     },
+
+    netFetch: (url: string, options?: any) => performNetFetch(url, options),
   };
 
   bluetooth = {
@@ -522,6 +526,7 @@ export class NativeCapabilities {
     join: (input: string | { scan?: boolean; payload?: string; qrPayload?: string; name?: string; room?: string }) =>
       joinMultiplayer(this.appId, (event, data) => this.eventEmitter.emit(event, data), input),
     send: (data: unknown, opts?: { to?: string }) => sendMultiplayer(this.appId, data, opts),
+    sendBinary: (input: { id: string; base64: string; to?: string }) => sendBinaryMultiplayer(this.appId, input),
     broadcast: (data: unknown) => broadcastMultiplayer(this.appId, data),
     leave: () => leaveMultiplayer(this.appId),
     showQr: () => showMultiplayerQr(this.appId, 'all'),

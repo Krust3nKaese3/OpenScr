@@ -25,6 +25,8 @@ interface Member extends PlayerView {
   lastSeen: number;
   disconnectedAt: number | null;
   stamps: number[];
+  binSeen: Set<string>;
+  binBytes: { at: number; n: number }[];
 }
 
 export interface RelayResult {
@@ -97,6 +99,8 @@ export class GameRoom {
         lastSeen: opts.now,
         disconnectedAt: member.host ? null : opts.now,
         stamps: [],
+        binSeen: new Set<string>(),
+        binBytes: [],
       }));
       return;
     }
@@ -112,6 +116,8 @@ export class GameRoom {
       lastSeen: opts.now,
       disconnectedAt: null,
       stamps: [],
+      binSeen: new Set<string>(),
+      binBytes: [],
     });
   }
 
@@ -140,6 +146,8 @@ export class GameRoom {
       lastSeen: now,
       disconnectedAt: null,
       stamps: [],
+      binSeen: new Set<string>(),
+      binBytes: [],
     };
     this.members.push(member);
     return { ok: true, player: viewOf(member), secret: member.secret, resumed: false };
@@ -175,6 +183,8 @@ export class GameRoom {
       lastSeen: now,
       disconnectedAt: null,
       stamps: [],
+      binSeen: new Set<string>(),
+      binBytes: [],
     };
     this.members.push(member);
     return { ok: true, player: viewOf(member), secret: member.secret, resumed: false };
@@ -250,6 +260,40 @@ export class GameRoom {
     const targets = this.members.filter((member) => member.id !== from.id && this.reachable(member, now));
     this.seq += 1;
     return { seq: this.seq, from: from.id, data: clean, targets: targets.map((member) => member.id) };
+  }
+
+  /**
+   * Ein Binärstück. Die Spielnachrichten-Grenze von 32 KiB gilt hier nicht.
+   * Pro Übertragung zählt eine Nachricht, die Bytes haben ein eigenes Kontingent.
+   */
+  relayBin(fromId: string, chunkBytes: number, to: string | undefined, all: boolean, transferId: string, now = Date.now()): { from: string; targets: string[] } {
+    const from = this.members.find((member) => member.id === fromId && member.connected);
+    if (!from) throw new Error('Du bist nicht in diesem Raum.');
+    if (!from.binSeen.has(transferId)) {
+      if (!this.takeMessage(from, now)) throw new Error('Zu viele Nachrichten.');
+      from.binSeen.add(transferId);
+      if (from.binSeen.size > 64) {
+        const first = from.binSeen.values().next().value;
+        if (first) from.binSeen.delete(first);
+      }
+    }
+    from.binBytes = from.binBytes.filter((item) => now - item.at < MP_LIMITS.messageWindowMs);
+    const used = from.binBytes.reduce((sum, item) => sum + item.n, 0);
+    if (used + chunkBytes > MP_LIMITS.maxBinaryBytesPer10s) throw new Error('Zu viele Binärdaten.');
+    from.binBytes.push({ at: now, n: chunkBytes });
+    let targets: Member[];
+    if (to) {
+      const dest = this.members.find((member) => member.id === to && this.reachable(member, now));
+      if (!dest) throw new Error('Empfänger ist nicht verbunden.');
+      if (dest.id === from.id) throw new Error('Eine Nachricht an sich selbst geht nicht.');
+      targets = [dest];
+    } else if (all || from.host) {
+      targets = this.members.filter((member) => member.id !== from.id && this.reachable(member, now));
+    } else {
+      const host = this.members.find((member) => member.host && member.connected);
+      targets = host ? [host] : [];
+    }
+    return { from: from.id, targets: targets.map((member) => member.id) };
   }
 
   private freshId(): string {

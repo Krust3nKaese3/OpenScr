@@ -8,6 +8,8 @@ export const MP_LIMITS = {
   version: 1,
   maxPayloadBytes: 32 * 1024,
   maxFrameBytes: 40 * 1024,
+  /** Ein TCP-Lesen darf ein 256-KiB-Binärpaket in Stücken fassen. */
+  maxReadBuffer: 480 * 1024,
   maxPlayers: 16,
   minPlayers: 2,
   defaultPlayers: 8,
@@ -19,6 +21,7 @@ export const MP_LIMITS = {
   handshakeMs: 5_000,
   maxPending: 8,
   maxMessagesPer10s: 80,
+  maxBinaryBytesPer10s: 1024 * 1024,
   maxInboundPer10s: 100,
   messageWindowMs: 10_000,
   maxFramesPerChunk: 32,
@@ -67,6 +70,17 @@ export interface MsgFrame {
   seq?: number;
 }
 
+export interface BinFrame {
+  t: 'bin';
+  id: string;
+  i: number;
+  n: number;
+  b: string;
+  from?: string;
+  to?: string;
+  all?: boolean;
+}
+
 export interface AskFrame {
   t: 'ask';
   v: 1;
@@ -82,19 +96,20 @@ export type WireFrame =
   | { t: 'welcome'; playerId: string; secret: string; token?: string; roomId?: string; players: PlayerView[] }
   | { t: 'players'; players: PlayerView[] }
   | MsgFrame
+  | BinFrame
   | { t: 'ping'; ts: number }
   | { t: 'pong'; ts: number }
   | { t: 'leave' }
   | { t: 'error'; code: string; message: string };
 
-const TYPES = new Set(['hello', 'ask', 'welcome', 'players', 'msg', 'ping', 'pong', 'leave', 'error']);
+const TYPES = new Set(['hello', 'ask', 'welcome', 'players', 'msg', 'bin', 'ping', 'pong', 'leave', 'error']);
 
 export function encodeFrame(frame: WireFrame): string {
   return `${JSON.stringify(frame)}\n`;
 }
 
 export function decodeFrames(buffer: string): { frames: WireFrame[]; rest: string; error?: string } {
-  if (buffer.length > MP_LIMITS.maxFrameBytes * 4) return { frames: [], rest: '', error: 'Rahmen zu groß.' };
+  if (buffer.length > MP_LIMITS.maxReadBuffer) return { frames: [], rest: '', error: 'Rahmen zu groß.' };
   const lines = buffer.split('\n');
   const rest = lines.pop() ?? '';
   if (utf8Bytes(rest) > MP_LIMITS.maxFrameBytes) return { frames: [], rest: '', error: 'Rahmen zu groß.' };
@@ -179,6 +194,28 @@ function asFrame(value: unknown): WireFrame | null {
       all: row.all === true ? true : undefined,
       data,
       seq: typeof row.seq === 'number' ? row.seq : undefined,
+    };
+  }
+  if (row.t === 'bin') {
+    if (!short(row.id, 32) || !/^[A-Za-z0-9_-]+$/.test(row.id)) return null;
+    if (!Number.isInteger(row.i) || !Number.isInteger(row.n)) return null;
+    const index = row.i as number;
+    const count = row.n as number;
+    if (count < 1 || count > 32 || index < 0 || index >= count) return null;
+    if (typeof row.b !== 'string' || row.b.length < 4 || row.b.length > 20_000) return null;
+    if (!/^[A-Za-z0-9+/=]+$/.test(row.b)) return null;
+    if (row.from != null && !short(row.from, 64)) return null;
+    if (row.to != null && !short(row.to, 64)) return null;
+    if (row.all != null && typeof row.all !== 'boolean') return null;
+    return {
+      t: 'bin',
+      id: row.id,
+      i: index,
+      n: count,
+      b: row.b,
+      from: typeof row.from === 'string' ? row.from : undefined,
+      to: typeof row.to === 'string' ? row.to : undefined,
+      all: row.all === true ? true : undefined,
     };
   }
   if (row.t === 'ping' || row.t === 'pong') {

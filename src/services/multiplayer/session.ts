@@ -1,7 +1,8 @@
 /**
  * Eine Sitzung pro Gerät. Der Host verteilt JSON-Nachrichten nur innerhalb derselben OpenScrapp.
  */
-import { MP_LIMITS, PlayerView, assertPayload, decodeFrames, encodeFrame, playerName, type WireFrame } from './protocol';
+import { bytesToBase64, base64ByteLength, base64ToBytes, pushBinaryChunk, splitBytes, type BinarySlot } from '../binaryWire';
+import { MP_LIMITS, PlayerView, assertPayload, decodeFrames, encodeFrame, playerName, type BinFrame, type WireFrame } from './protocol';
 import { decodeJoinUrl, encodeJoinUrl, isPrivateIPv4, type JoinTarget } from './qr';
 import { GameRoom, type RelayResult } from './room';
 import { tcpTransport, type MpLink, type MpServer, type MpTransport } from './transport';
@@ -104,6 +105,7 @@ interface LiveSession {
   held: Map<string, { at: number; frame: string }[]>;
   /** Vom App-Gast geschickt, solange der Socket fehlt. */
   outbox: string[];
+  binaryIn: Map<string, BinarySlot>;
 }
 
 let live: LiveSession | null = null;
@@ -412,6 +414,38 @@ function deliver(session: LiveSession, result: RelayResult): void {
   }
 }
 
+function deliverEncoded(session: LiveSession, targets: string[], text: string, self?: () => void): void {
+  const now = Date.now();
+  for (const id of targets) {
+    if (id === session.selfId) {
+      self?.();
+      continue;
+    }
+    const link = session.links.get(id);
+    if (link) {
+      link.send(text);
+      continue;
+    }
+    const seated = session.room?.players().some((player) => player.id === id);
+    if (!seated) continue;
+    const queued = (session.held.get(id) || []).filter((item) => now - item.at <= MP_LIMITS.gapHoldMs);
+    queued.push({ at: now, frame: text });
+    session.held.set(id, queued.slice(-MP_LIMITS.gapHoldMax));
+  }
+}
+
+function acceptBin(session: LiveSession, frame: BinFrame): void {
+  const key = `${frame.from || ''}:${frame.id}`;
+  const result = pushBinaryChunk(session.binaryIn.get(key), { i: frame.i, n: frame.n, b: frame.b });
+  session.emit('multiplayer.binaryProgress', { id: frame.id, from: frame.from, received: result.received, total: result.total });
+  if (!result.done) {
+    session.binaryIn.set(key, result.slot);
+    return;
+  }
+  session.binaryIn.delete(key);
+  session.emit('multiplayer.binary', { id: frame.id, from: frame.from, base64: bytesToBase64(result.done) });
+}
+
 function flushHeld(session: LiveSession, playerId: string, link: MpLink): void {
   const now = Date.now();
   const queued = session.held.get(playerId) || [];
@@ -560,6 +594,7 @@ function blankSession(partial: Partial<LiveSession> & Pick<LiveSession, 'appId' 
     secret: partial.secret ?? '',
     held: new Map(),
     outbox: [],
+    binaryIn: new Map(),
     sockets: partial.sockets ?? new Set(),
     handshakeTimers: partial.handshakeTimers ?? new Set(),
     pending: new Map(),
@@ -712,7 +747,7 @@ function pump(session: LiveSession, link: MpLink, onFrame: (frame: WireFrame) =>
   let buffer = '';
   link.onData((chunk) => {
     buffer += chunk;
-    if (buffer.length > MP_LIMITS.maxFrameBytes * 4) {
+    if (buffer.length > MP_LIMITS.maxReadBuffer) {
       buffer = '';
       link.close();
       return;
@@ -814,6 +849,22 @@ function bindHostLink(session: LiveSession, link: MpLink): void {
       publishPlayers(session);
       void remember(session);
       void announce(session);
+      return;
+    }
+    if (frame.t === 'bin') {
+      try {
+        const rawLen = base64ByteLength(frame.b);
+        const routed = session.room.relayBin(playerId, rawLen, frame.to, frame.all === true, frame.id, at);
+        const text = encodeFrame({
+          t: 'bin', id: frame.id, i: frame.i, n: frame.n, b: frame.b, from: routed.from, to: frame.to, all: frame.all,
+        });
+        deliverEncoded(session, routed.targets, text, () => acceptBin(session, { ...frame, from: routed.from }));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Binärdaten abgelehnt.';
+        const rate = /zu viele/i.test(message);
+        link.send(encodeFrame({ t: 'error', code: rate ? 'rate' : 'msg', message }));
+        if (rate) link.close();
+      }
       return;
     }
     if (frame.t !== 'msg') return;
@@ -995,7 +1046,7 @@ async function openGuest(session: LiveSession, transport: MpTransport): Promise<
     clock.timer = setTimeout(() => fail(new Error('Der Host antwortet nicht.')), session.token ? 8000 : MP_LIMITS.askTimeoutMs);
     link.onData((chunk) => {
       buffer += chunk;
-      if (buffer.length > MP_LIMITS.maxFrameBytes * 4) {
+      if (buffer.length > MP_LIMITS.maxReadBuffer) {
         fail(new Error('Der Host hat zu viele Daten geschickt.'));
         return;
       }
@@ -1037,6 +1088,8 @@ async function openGuest(session: LiveSession, transport: MpTransport): Promise<
           session.emit('multiplayer.players', { players: frame.players, selfId: session.selfId, roomCode: session.roomCode });
         } else if (frame.t === 'msg' && frame.from) {
           session.emit('multiplayer.message', { from: frame.from, data: frame.data });
+        } else if (frame.t === 'bin') {
+          acceptBin(session, frame);
         } else if (frame.t === 'ping') {
           link.send(encodeFrame({ t: 'pong', ts: frame.ts }));
         }
@@ -1140,6 +1193,35 @@ export async function broadcastMultiplayer(appId: string, data: unknown): Promis
     return { seq: result.seq };
   }
   return queueGuestFrame(session, { t: 'msg', all: true, data: clean });
+}
+
+export async function sendBinaryMultiplayer(
+  appId: string,
+  input: { id: string; base64: string; to?: string },
+): Promise<{ id: string; chunks: number; byteLength: number }> {
+  const bytes = base64ByteLength(input.base64);
+  const chunks = splitBytes(base64ToBytes(input.base64));
+  const session = requireSession(appId);
+  for (const chunk of chunks) {
+    const frame: BinFrame = {
+      t: 'bin',
+      id: input.id,
+      i: chunk.i,
+      n: chunk.n,
+      b: chunk.b,
+      to: input.to,
+      all: input.to ? undefined : true,
+    };
+    if (session.role === 'host' && session.room) {
+      const routed = session.room.relayBin(session.selfId, base64ByteLength(chunk.b), input.to, !input.to, input.id);
+      const text = encodeFrame({ ...frame, from: routed.from });
+      deliverEncoded(session, routed.targets, text, () => acceptBin(session, { ...frame, from: routed.from }));
+    } else {
+      queueGuestFrame(session, frame);
+    }
+    session.emit('multiplayer.binaryProgress', { id: input.id, received: chunk.i + 1, total: chunk.n, direction: 'out' });
+  }
+  return { id: input.id, chunks: chunks.length, byteLength: bytes };
 }
 
 function queueGuestFrame(session: LiveSession, frame: WireFrame): { seq: number } {

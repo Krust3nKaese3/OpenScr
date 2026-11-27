@@ -197,6 +197,20 @@ function httpOptions(value: unknown): Record<string, unknown> | undefined {
   };
 }
 
+function netFetchOptions(value: unknown): Record<string, unknown> | undefined {
+  if (value == null) return undefined;
+  const opt = plainObject(value, 'HTTP-Optionen', 400_000);
+  return {
+    method: opt.method == null ? undefined : str(opt.method, 'HTTP-Methode', 16),
+    headers: opt.headers == null ? undefined : stringMap(opt.headers, 'HTTP-Header', 40, 4096),
+    body: opt.body == null ? undefined : str(opt.body, 'HTTP-Body', 200_000),
+    bodyBase64: opt.bodyBase64 == null ? undefined : str(opt.bodyBase64, 'HTTP-Body', 360_000),
+    timeoutMs: opt.timeoutMs == null ? undefined : num(opt.timeoutMs, 'Zeitlimit', 1, 60_000, true),
+    binary: opt.binary == null ? undefined : bool(opt.binary, 'Binär'),
+    chunked: opt.chunked == null ? undefined : bool(opt.chunked, 'Stücke'),
+  };
+}
+
 function hostName(value: unknown): string {
   const host = str(value, 'Host', 253);
   if (host.includes('://') || host.includes('/') || host.includes(' ') || host.includes('\\')) {
@@ -274,6 +288,16 @@ function multiplayerBroadcast(args: unknown[]): unknown[] {
   return [boundedJson(args[0], 'Nachricht', 32 * 1024)];
 }
 
+function multiplayerBinary(args: unknown[]): unknown[] {
+  exact(args, 1, 1);
+  const raw = plainObject(args[0], 'Binärdaten', 400_000);
+  const id = str(raw.id, 'Kennung', 32);
+  if (!/^[A-Za-z0-9_-]+$/.test(id)) throw new Error('Kennung ist ungültig.');
+  const base64 = str(raw.base64, 'Daten', 360_000);
+  const to = raw.to == null ? undefined : str(raw.to, 'Empfänger', 64);
+  return [{ id, base64, to }];
+}
+
 const BRIDGE_METHODS: Record<string, MethodSpec> = {
   'storage.get': method({ category: 'storage', action: 'get', rate: STORAGE_RATE, validate: storageKeyArg }),
   'storage.set': method({ category: 'storage', action: 'set', rate: STORAGE_RATE, validate: storageSet }),
@@ -287,6 +311,7 @@ const BRIDGE_METHODS: Record<string, MethodSpec> = {
 
   'http.request': method({ category: 'http', action: 'request', rate: HTTP_RATE, validate: (a) => (exact(a, 1, 1), [httpRequest(a[0])]) }),
   'http.fetch': method({ category: 'http', action: 'fetch', rate: HTTP_RATE, validate: (a) => (exact(a, 1, 2), [assertHttpUrl(a[0]), httpOptions(a[1])]) }),
+  'net.fetch': method({ category: 'http', action: 'netFetch', rate: HTTP_RATE, validate: (a) => (exact(a, 1, 2), [assertHttpUrl(a[0]), netFetchOptions(a[1])]) }),
 
   'bluetooth.scan': method({ category: 'bluetooth', action: 'scan', rate: SCAN_RATE, validate: none }),
   'bluetooth.connect': method({ category: 'bluetooth', action: 'connect', validate: (a) => (exact(a, 1, 1), [idStr(a[0], 'Gerät')]) }),
@@ -417,6 +442,7 @@ const BRIDGE_METHODS: Record<string, MethodSpec> = {
   'multiplayer.join': method({ category: 'multiplayer', action: 'join', rate: MP_ROOM_RATE, validate: multiplayerJoin }),
   'multiplayer.send': method({ category: 'multiplayer', action: 'send', rate: MP_SEND_RATE, validate: multiplayerSend }),
   'multiplayer.broadcast': method({ category: 'multiplayer', action: 'broadcast', rate: MP_SEND_RATE, validate: multiplayerBroadcast }),
+  'multiplayer.sendBinary': method({ category: 'multiplayer', action: 'sendBinary', rate: MP_SEND_RATE, validate: multiplayerBinary }),
   'multiplayer.leave': method({ category: 'multiplayer', action: 'leave', rate: MP_ROOM_RATE, validate: none }),
   'multiplayer.showQr': method({ category: 'multiplayer', action: 'showQr', validate: none }),
   'multiplayer.showWifiQr': method({ category: 'multiplayer', action: 'showWifiQr', validate: none }),
@@ -467,6 +493,8 @@ export const BRIDGE_EVENTS: Record<string, Permission | null> = {
   'multiplayer.joinRequest': 'multiplayer',
   'multiplayer.resumed': 'multiplayer',
   'multiplayer.hostAway': 'multiplayer',
+  'multiplayer.binary': 'multiplayer',
+  'multiplayer.binaryProgress': 'multiplayer',
 };
 
 export type ParsedMessage =
