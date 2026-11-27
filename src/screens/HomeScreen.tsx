@@ -65,7 +65,7 @@ import { AddonSheet } from '../components/AddonSheet';
 import { appearanceMode, setAppearance, useContainerTheme } from '../theme/containerTheme';
 import { NavGlyph, ScrappGlyph } from '../components/ScrappGlyph';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { notify } from '../services/notify';
+import { notify, notifyCopyable } from '../services/notify';
 
 function AddonMarks({ rows, app, color, muted }: { rows: CachedAddon[]; app: MiniApp; color: string; muted: string }) {
   const marks = activeAddonMarks(rows, {
@@ -202,6 +202,7 @@ export const HomeScreen: React.FC = () => {
       } else if (decision.type === 'install') {
         origin = decision.origin;
       }
+      if (!downloadToken) downloadToken = (await GithubSession.getToken()) || undefined;
       const app = await GitRepoService.fetchRepo(trimmed, downloadToken ? { token: downloadToken } : undefined);
       app.origin = origin;
       if (ownerLogin) app.ownerLogin = ownerLogin;
@@ -218,7 +219,7 @@ export const HomeScreen: React.FC = () => {
       setRevealId(app.id);
     } catch (error: any) {
       await refreshSession();
-      notify('Fehler', error.message);
+      notifyCopyable('Fehler', error.message);
     } finally {
       setLoading(false);
     }
@@ -307,6 +308,7 @@ export const HomeScreen: React.FC = () => {
 
   const checkUpdates = async (installed: MiniApp[]) => {
     const session = (ownReposOnly || catalogOnly) ? await GithubSession.load() : { developerMode: false, login: null as string | null };
+    const signedInToken = (await GithubSession.getToken()) || undefined;
     const found: Record<string, string> = {};
     for (const app of installed) {
       const access = accessFor(app, { developerMode: session.developerMode, signedInLogin: session.login });
@@ -316,7 +318,7 @@ export const HomeScreen: React.FC = () => {
           const confirmed = await GithubSession.confirmOwnership(app.repoUrl);
           found[app.id] = await GitRepoService.latestCommit(app.repoUrl, { token: confirmed.token });
         } else {
-          found[app.id] = await GitRepoService.latestCommit(app.repoUrl);
+          found[app.id] = await GitRepoService.latestCommit(app.repoUrl, signedInToken ? { token: signedInToken } : undefined);
         }
       } catch {
         // Offline or GitHub rate limit: the installed copy stays usable.
@@ -458,6 +460,8 @@ export const HomeScreen: React.FC = () => {
       if (access.verifyOwnership) {
         const confirmed = await GithubSession.confirmOwnership(app.repoUrl);
         token = confirmed.token;
+      } else {
+        token = (await GithubSession.getToken()) || undefined;
       }
       const fresh = await GitRepoService.fetchRepo(app.repoUrl, token ? { token } : undefined);
       const merged = mergeUpdatedApp(app, fresh);
@@ -467,7 +471,7 @@ export const HomeScreen: React.FC = () => {
       return merged;
     } catch (error: any) {
       await refreshSession();
-      notify('Aktualisierung fehlgeschlagen', error.message);
+      notifyCopyable('Aktualisierung fehlgeschlagen', error.message);
       return null;
     } finally {
       setRefreshingId(null);
@@ -493,9 +497,11 @@ export const HomeScreen: React.FC = () => {
         authToken = confirmed.token;
       } catch (error: any) {
         await refreshSession();
-        if (!quiet) notify(ownReposOnly ? 'Nur eigene Repositories' : 'Entwicklermodus', error.message || 'Die Zugehörigkeit konnte nicht geprüft werden.');
+        if (!quiet) notifyCopyable(ownReposOnly ? 'Nur eigene Repositories' : 'Entwicklermodus', error.message || 'Die Zugehörigkeit konnte nicht geprüft werden.');
         return;
       }
+    } else {
+      authToken = (await GithubSession.getToken()) || undefined;
     }
     let latest: string | undefined = latestSha[app.id];
     if (!latest) {

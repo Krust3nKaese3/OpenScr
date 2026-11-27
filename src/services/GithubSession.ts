@@ -4,7 +4,7 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SecretStore } from './SecretStore';
-import { GITHUB_API_HEADERS } from './githubPin';
+import { githubFailureMessage, githubRequestHeaders } from './githubApi';
 import { parseGitHubRepo } from './miniAppFiles';
 import {
   DevicePoll,
@@ -33,16 +33,26 @@ export interface DeveloperSession {
 }
 
 async function githubApi(url: string, token?: string, init?: RequestInit): Promise<Response> {
-  const headers: Record<string, string> = { ...GITHUB_API_HEADERS };
-  if (token) headers.Authorization = `Bearer ${token}`;
+  const headers = githubRequestHeaders(token);
   if (init?.headers) Object.assign(headers, init.headers);
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 20_000);
   try {
-    return await fetch(url, { ...init, headers, signal: ctrl.signal });
+    return await fetch(url, { ...init, headers, signal: ctrl.signal, cache: 'no-store' });
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function githubStatusError(response: Response, authenticated: boolean): Promise<Error> {
+  let bodyText = '';
+  try { bodyText = await response.text(); } catch { bodyText = ''; }
+  return new Error(githubFailureMessage({
+    status: response.status,
+    headers: response.headers,
+    bodyText,
+    authenticated,
+  }));
 }
 
 export class GithubSession {
@@ -72,7 +82,7 @@ export class GithubSession {
     const token = normalizeAccessToken(rawToken);
     const response = await githubApi(USER_URL, token);
     if (response.status === 401) throw new Error('GitHub hat das Token abgelehnt. Es wurde nicht gespeichert.');
-    if (!response.ok) throw new Error(`GitHub-Anmeldung fehlgeschlagen (${response.status}).`);
+    if (!response.ok) throw await githubStatusError(response, true);
     const login = parseAuthenticatedUser(await response.json());
     await SecretStore.set(HOST_ID, TOKEN_KEY, token);
     await AsyncStorage.setItem(LOGIN_KEY, login);
@@ -126,7 +136,7 @@ export class GithubSession {
       throw new Error('GitHub hat die Anmeldung abgelehnt. Die Sitzung wurde beendet.');
     }
     if (response.status === 404) throw new Error('Repository nicht gefunden oder für dieses Konto nicht sichtbar.');
-    if (!response.ok) throw new Error(`GitHub-Anfrage fehlgeschlagen (${response.status}).`);
+    if (!response.ok) throw await githubStatusError(response, true);
     const ownerLogin = parseRepoOwner(await response.json());
     if (!ownsRepo(session.login, ownerLogin)) {
       throw new Error('GitHub bestätigt, dass dieses Repository nicht dem angemeldeten Konto gehört.');

@@ -1,6 +1,16 @@
 import { Alert, Platform } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 
 type Button = { text?: string; style?: string; onPress?: () => void };
+
+/** Alert text on Android is not selectable. Kopieren writes the full notice. */
+export function notifyCopyable(title: string, message?: string): void {
+  const text = [title, message].filter(Boolean).join('\n');
+  notify(title, message, [
+    { text: 'OK', style: 'cancel' },
+    { text: 'Kopieren', onPress: () => { void Clipboard.setStringAsync(text); } },
+  ]);
+}
 
 /** Alert.alert is a no-op on react-native-web. The browser gets a real dialog. */
 export function notify(title: string, message?: string, buttons?: Button[]): void {
