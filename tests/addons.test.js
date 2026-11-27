@@ -8,7 +8,7 @@ const { DEV_ADDON_PREFILL, devAddonPrefill } = require('../src/services/addons/d
 
 test('Dev füllt die Add-on-Adresse für Imposter Dance vor', () => {
   const id = 'github_com_krust3nkaese3_imposterdancescrapp';
-  const url = 'https://github.com/Krust3nKaese3/ImposterDanceYouTubeAddon';
+  const url = 'https://github.com/Krust3nKaese3/ImpostorDanceYoutube';
   assert.strictEqual(DEV_ADDON_PREFILL[id], url);
   assert.strictEqual(devAddonPrefill(id, true), url);
   assert.strictEqual(devAddonPrefill(id, false), '');
@@ -119,4 +119,21 @@ test('download prüft addon.json über einen Ersatz für fetch', async () => {
   });
   assert.strictEqual(fetched.files['main.js'], 'var ok = 1;');
   assert.strictEqual(fetched.commitSha, sha);
+});
+
+test('privates Add-on ohne Scope repo verweist auf das Token', async () => {
+  const { ADDON_PRIVATE_TOKEN_HINT } = require('../src/services/addons/download.ts');
+  await assert.rejects(
+    () => downloadAddon('https://github.com/Krust3nKaese3/ImpostorDanceYoutube', 'session-token', async (url) => {
+      if (url === 'https://api.github.com/user') {
+        return { ok: true, status: 200, headers: { 'x-oauth-scopes': 'public_repo' }, text: async () => '{"login":"krusten"}' };
+      }
+      return { ok: false, status: 404, text: async () => '{"message":"Not Found"}' };
+    }, 'session'),
+    (error) => {
+      assert.match(error.message, /Scope „repo“ fehlt/);
+      assert.match(error.message, new RegExp(ADDON_PRIVATE_TOKEN_HINT.replace('?', '\\?')));
+      return true;
+    },
+  );
 });
