@@ -4,6 +4,16 @@ const { parseAddonManifest, versionAtLeast, scrappMatchesTarget, addonFitsScrapp
 const { injectionForScrapp, activeAddonMarks, addonSourceEntries } = require('../src/services/addons/inject.ts');
 const { downloadAddon } = require('../src/services/addons/download.ts');
 const { addonsAvailable, addonsRequireOwnRepo } = require('../src/services/iosPolicy.ts');
+const { DEV_ADDON_PREFILL, devAddonPrefill } = require('../src/services/addons/devPrefill.ts');
+
+test('Dev füllt die Add-on-Adresse für Imposter Dance vor', () => {
+  const id = 'github_com_krust3nkaese3_imposterdancescrapp';
+  const url = 'https://github.com/Krust3nKaese3/ImposterDanceYouTubeAddon';
+  assert.strictEqual(DEV_ADDON_PREFILL[id], url);
+  assert.strictEqual(devAddonPrefill(id, true), url);
+  assert.strictEqual(devAddonPrefill(id, false), '');
+  assert.strictEqual(devAddonPrefill('other', true), '');
+});
 
 test('addon.json wird geprüft und die Version verglichen', () => {
   const manifest = parseAddonManifest({
