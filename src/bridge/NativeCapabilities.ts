@@ -77,6 +77,14 @@ import { roomStore } from '../services/multiplayer/secureRoomStore';
 import { setHostKeepAlive } from '../services/multiplayer/hostKeepAlive';
 import { setKeepAwake } from '../services/keepAwake';
 import { addPlayer, listPlayers, removePlayer, updatePlayer } from '../services/playerRoster';
+import {
+  addPlayedSong,
+  clearPlayedSongs,
+  listPlayedSongs,
+  listSongSources,
+  type SongCaller,
+  type SongListQuery,
+} from '../services/songHistory';
 import { requestCameraCapture } from '../services/cameraCapture';
 import { EXPORT_MIME_DEFAULT, safeExportFileName } from '../services/shareExport';
 import { NOTIFICATION_APP_KEY, notificationTitle } from '../services/scrappNotify';
@@ -93,18 +101,24 @@ Notifications.setNotificationHandler({
 
 export class NativeCapabilities {
   private appId: string;
+  private songCaller: SongCaller;
   public eventEmitter: EventEmitter;
   private bluetoothConnectedSub: any;
   private bluetoothDisconnectedSub: any;
   private stopSpotify: (() => void) | null = null;
 
-  constructor(appId: string) {
+  constructor(appId: string, profile?: { name?: string; repoUrl?: string }) {
     configureMultiplayer({
       discovery: nativeDiscoveryPort(),
       store: roomStore(),
       keepAlive: setHostKeepAlive,
     });
     this.appId = appId;
+    this.songCaller = {
+      id: appId,
+      name: profile?.name || appId,
+      repoUrl: profile?.repoUrl || '',
+    };
     this.eventEmitter = new EventEmitter();
     if (Platform.OS === 'web') {
       this.stopSpotify = subscribeWebDev((event, data) => {
@@ -560,6 +574,29 @@ export class NativeCapabilities {
     live: () => liveMultiplayer(this.appId),
     resume: () => resumeMultiplayer(this.appId, (event, data) => this.eventEmitter.emit(event, data)),
   };
+
+  songHistory = {
+    add: (input: { title: string; artist?: string }) => addPlayedSong(this.songCaller, input),
+    list: async (query: SongListQuery) => {
+      const apps = await this.installedSongCallers();
+      return listPlayedSongs(this.songCaller, query || {}, apps);
+    },
+    sources: () => listSongSources(),
+    clear: () => clearPlayedSongs(this.appId),
+  };
+
+  private async installedSongCallers(): Promise<SongCaller[]> {
+    try {
+      const apps = await StorageService.getApps();
+      return apps.map((app) => ({
+        id: app.id,
+        name: app.manifest?.name || app.id,
+        repoUrl: app.repoUrl || '',
+      }));
+    } catch {
+      return [this.songCaller];
+    }
+  }
 
   players = {
     list: () => listPlayers(),

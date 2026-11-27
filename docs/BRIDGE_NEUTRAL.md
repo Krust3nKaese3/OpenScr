@@ -65,3 +65,52 @@ OpenScrBridge.multiplayer.onBinaryProgress((progress) => {
 Ohne `to` geht das Paket an alle anderen im Raum. Die Nutzlast darf 256 KiB groß sein, also über der Grenze von 32 KiB für `multiplayer.send`. Stücke zu 12000 Bytes laufen als Rahmen `bin`. Der Empfänger setzt sie wieder zusammen. Fortschritt kommt als `multiplayer.binaryProgress`, das fertige Paket als `multiplayer.binary`. Pro Übertragung zählt eine Spielnachricht. Zusätzlich gelten höchstens 1 MiB Binärdaten in 10 Sekunden und derselbe Deckel von 80 Nachrichten in 10 Sekunden für den ersten Stückwechsel einer Übertragung.
 
 `multiplayer.send` bleibt bei 32 KiB.
+
+## songHistory
+
+Gemeinsame Liste zuletzt gespielter Titel auf diesem Gerät. Sie liegt im Host unter `@openscr_song_history` (AsyncStorage), nicht im Speicher einer einzelnen OpenScrapp. `songraten.history.v1` von Song raten bleibt deren eigene Allzeit-Statistik und wird hier nicht gelesen. Add-ons laufen in derselben WebView und sehen `OpenScrBridge.songHistory` mit.
+
+Der Host setzt `source` auf die App-Id der laufenden OpenScrapp und `sourceName` auf ihren Anzeigenamen. Felder dafür vom Aufrufer werden verworfen. `playedAt` ist der Zeitpunkt des Aufrufs in Millisekunden. Titel und Künstler werden bereinigt und auf 200 Zeichen gekürzt. Dieselbe Kombination aus normalisiertem Titel, Künstler und Quelle aktualisiert nur `playedAt`. Höchstens 200 Einträge. Beim Lesen und Schreiben fallen Einträge weg, die älter als 24 Stunden sind. Mitternacht löscht nichts.
+
+`songHistory.add` ist auf 30 Aufrufe pro Minute und OpenScrapp begrenzt. Die Kategorie `songHistory` braucht keine Zustimmung und keinen Eintrag in `openscr.json`. Sie gilt auch auf iOS.
+
+| Methode | Rückgabe |
+| --- | --- |
+| `songHistory.add({ title, artist? })` | `{ ok: true }` |
+| `songHistory.list({ source?, excludeSelf?, sinceMs? })` | Einträge, neueste zuerst |
+| `songHistory.sources()` | `[{ source, sourceName, count }]` der letzten 24 Stunden |
+| `songHistory.clear()` | `{ ok: true }`, nur die Einträge der aufrufenden OpenScrapp |
+
+`source` in `list` trifft wie `targetScrapp` bei Add-ons: App-Id, `owner/repo`, Repository-Name oder Anzeigename, nach derselben Normalisierung. `excludeSelf: true` lässt die eigene OpenScrapp weg. `sinceMs` engt das Fenster ein. Älter als 24 Stunden liefert es nichts.
+
+Ein Eintrag ist `{ title, artist?, source, sourceName, playedAt }`.
+
+### Beispiel für Song raten und Imposter Dance
+
+```javascript
+const bridge = window.OpenScrBridge;
+
+// Nachdem ein Song wirklich gespielt wurde:
+await bridge.songHistory.add({ title: track.name, artist: track.artist });
+
+// Im Suchfeld: Knopf nur, wenn die andere OpenScrapp Titel hat.
+async function recentSongButtons(searchInput) {
+  const box = document.querySelector('#recent-songs');
+  box.textContent = '';
+  const sources = await bridge.songHistory.sources();
+  const songs = await bridge.songHistory.list({ excludeSelf: true });
+  for (const row of sources) {
+    const fromThere = songs.filter((entry) => entry.source === row.source);
+    if (!fromThere.length) continue;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = 'Songs aus ' + row.sourceName;
+    button.addEventListener('click', () => {
+      const pick = fromThere[0];
+      searchInput.value = pick.artist ? pick.title + ' ' + pick.artist : pick.title;
+      searchInput.dispatchEvent(new Event('input'));
+    });
+    box.appendChild(button);
+  }
+}
+```
