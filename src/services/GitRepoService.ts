@@ -8,7 +8,8 @@ import {
   normalizeEntrypoint,
   parseGitHubRepo,
 } from './miniAppFiles';
-import { GITHUB_API_HEADERS, commitApiUrl, githubRawUrlAtRef, parseCommitSha, treeApiUrl } from './githubPin';
+import { githubApiGet, rawGithubHeaders } from './githubApi';
+import { commitApiUrl, githubRawUrlAtRef, parseCommitSha, treeApiUrl } from './githubPin';
 
 const appsDir = () => appsDirectory();
 
@@ -55,9 +56,7 @@ export class GitRepoService {
         const result = await downloadAsync(
           githubRawUrlAtRef(owner, repo, commitSha, file.path),
           dest,
-          { headers: typeof document === 'undefined'
-            ? { 'Cache-Control': 'no-cache', Pragma: 'no-cache', ...GitRepoService.authHeaders(token) }
-            : GitRepoService.authHeaders(token) },
+          { headers: rawGithubHeaders(token) },
         );
         if (result.status < 200 || result.status >= 300) {
           throw new Error(`Failed to download ${file.rel} (${result.status})`);
@@ -130,57 +129,20 @@ export class GitRepoService {
     return this.fetchCommitSha(owner, repo, options?.token);
   }
 
-  private static authHeaders(token?: string): Record<string, string> {
-    if (!token) return {};
-    return { Authorization: `Bearer ${token}` };
-  }
-
   private static async fetchCommitSha(owner: string, repo: string, token?: string): Promise<string> {
-    const response = await this.githubGet(commitApiUrl(owner, repo), token);
+    const response = await githubApiGet(commitApiUrl(owner, repo), token);
     if (response.status === 404) {
       throw new Error('Repository oder Branch main nicht gefunden. Nur öffentliche GitHub-Repositories mit Branch main.');
     }
-    return parseCommitSha(await response.json());
+    return parseCommitSha(JSON.parse(response.body));
   }
 
   private static async fetchTree(owner: string, repo: string, sha: string, token?: string): Promise<GitTreeResponse> {
-    const response = await this.githubGet(treeApiUrl(owner, repo, sha), token);
+    const response = await githubApiGet(treeApiUrl(owner, repo, sha), token);
     if (response.status === 404) {
       throw new Error('Repository oder Branch main nicht gefunden. Nur öffentliche GitHub-Repositories mit Branch main.');
     }
-    return response.json();
-  }
-
-  private static async githubGet(url: string, token?: string): Promise<Response> {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 20_000);
-    try {
-      const headers = { ...GITHUB_API_HEADERS, ...this.authHeaders(token) };
-      // Cache-Control and Pragma make the browser preflight, which GitHub rejects.
-      if (typeof document !== 'undefined') {
-        delete headers['User-Agent'];
-        delete headers['Cache-Control'];
-        delete headers.Pragma;
-      }
-      let response: Response;
-      try {
-        response = await fetch(url, { headers, signal: ctrl.signal });
-      } catch (error: any) {
-        throw new Error(`GitHub nicht erreichbar: ${error?.message || error}`);
-      }
-      if (response.status === 401) {
-        throw new Error('GitHub hat die Anmeldung abgelehnt. Bitte im Entwicklermodus erneut anmelden.');
-      }
-      if (response.status === 403 || response.status === 429) {
-        throw new Error('GitHub-API-Limit erreicht. Bitte später erneut versuchen.');
-      }
-      if (!response.ok && response.status !== 404) {
-        throw new Error(`GitHub-Anfrage fehlgeschlagen (${response.status}).`);
-      }
-      return response;
-    } finally {
-      clearTimeout(timer);
-    }
+    return JSON.parse(response.body) as GitTreeResponse;
   }
 
   private static generateAppId(repoUrl: string): string {

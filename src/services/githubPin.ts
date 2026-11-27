@@ -1,3 +1,5 @@
+export { GITHUB_API_HEADERS } from './githubApi';
+
 /**
  * Mini-app downloads are pinned to a commit SHA.
  *
@@ -7,13 +9,6 @@
  * install sometimes saw newer bytes. Resolving `commits/main` and then
  * requesting `/<sha>/…` uses a new, immutable URL.
  */
-
-export const GITHUB_API_HEADERS: Record<string, string> = {
-  Accept: 'application/vnd.github+json',
-  'User-Agent': 'OpenScr',
-  'Cache-Control': 'no-cache',
-  Pragma: 'no-cache',
-};
 
 export function commitApiUrl(owner: string, repo: string, branch = 'main'): string {
   return `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits/${encodeURIComponent(branch)}`;

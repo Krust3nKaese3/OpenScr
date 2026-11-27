@@ -123,6 +123,8 @@ async function downloadChecked(platform: string, repoUrl: string, scrapp?: Scrap
   if (addonsRequireOwnRepo(platform)) {
     const confirmed = await GithubSession.confirmOwnership(repoUrl);
     if (!token) token = confirmed.token;
+  } else if (!token) {
+    token = await GithubSession.getToken();
   }
   const downloaded = await downloadAddon(repoUrl, token);
   if (scrapp) addonFitsScrapp(downloaded, scrapp);
