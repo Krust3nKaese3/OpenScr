@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
-import { addAddonRepo, listAddons, removeAddon, setAddonEnabled } from '../services/addons/store';
+import { ADDON_NOTICE, addAddonRepo, listAddons, readAddonNoticeAck, removeAddon, setAddonEnabled, writeAddonNoticeAck } from '../services/addons/store';
 import { addonTokenStoreAvailable, clearAddonGithubToken, readAddonGithubToken, writeAddonGithubToken } from '../services/addons/githubToken';
 import { CachedAddon } from '../services/addons/inject';
 
@@ -38,6 +38,16 @@ export const AddonSettings: React.FC<{ platform: string }> = ({ platform }) => {
     setBusy(true);
     setNote('');
     try {
+      if (!(await readAddonNoticeAck(platform))) {
+        const accepted = await new Promise<boolean>((resolve) => {
+          Alert.alert('Add-ons', ADDON_NOTICE, [
+            { text: 'Abbrechen', style: 'cancel', onPress: () => resolve(false) },
+            { text: 'Hinweis bestätigen', onPress: () => resolve(true) },
+          ]);
+        });
+        if (!accepted) return;
+        await writeAddonNoticeAck(platform);
+      }
       const row = await addAddonRepo(platform, repo.trim());
       setRepo('');
       setNote(`${row.name} ist gespeichert.`);
@@ -52,8 +62,9 @@ export const AddonSettings: React.FC<{ platform: string }> = ({ platform }) => {
   return (
     <View>
       <Text style={styles.title}>Add-ons</Text>
+      <Text selectable style={styles.body}>{ADDON_NOTICE}</Text>
       <Text style={styles.body}>
-        Ein Add-on ist ein GitHub-Repository mit addon.json. Es wird nach dem Start der genannten OpenScrapp eingesetzt. Auf iOS gibt es diese Funktion nicht.
+        Auf der Karte einer OpenScrapp öffnet das Add-on-Symbol dasselbe für genau diese OpenScrapp: Link, Schalter, Update und Entfernen. Auf iOS gibt es diese Funktion nicht.
       </Text>
       <TextInput
         style={styles.input}

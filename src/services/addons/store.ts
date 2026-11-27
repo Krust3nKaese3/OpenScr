@@ -3,21 +3,37 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { addonsAvailable } from '../iosPolicy';
+import { addonFitsScrapp } from './manifest';
 import { downloadAddon } from './download';
 import { CachedAddon, injectionForScrapp, ScrappRef, AddonInjection } from './inject';
 import { readAddonGithubToken } from './githubToken';
 
 const KEY = '@openscr_addons_v1';
+const ACK_KEY = '@openscr_addons_notice_ack_v1';
+
+export const ADDON_NOTICE =
+  'Add-ons sind Code von Dritten bzw. dein eigener Code zum Lernen und Ausprobieren. Nutzung auf eigene Verantwortung. OpenScr prüft Add-ons nicht.';
+
+export async function readAddonNoticeAck(platform: string): Promise<boolean> {
+  if (!addonsAvailable(platform)) return false;
+  return (await AsyncStorage.getItem(ACK_KEY)) === '1';
+}
+
+export async function writeAddonNoticeAck(platform: string): Promise<void> {
+  if (!addonsAvailable(platform)) return;
+  await AsyncStorage.setItem(ACK_KEY, '1');
+}
 
 export async function listAddons(platform: string): Promise<CachedAddon[]> {
   if (!addonsAvailable(platform)) return [];
   return readAll();
 }
 
-export async function addAddonRepo(platform: string, repoUrl: string): Promise<CachedAddon> {
+export async function addAddonRepo(platform: string, repoUrl: string, scrapp?: ScrappRef): Promise<CachedAddon> {
   if (!addonsAvailable(platform)) throw new Error('Add-ons gibt es auf diesem Gerät nicht.');
   const token = await readAddonGithubToken();
   const downloaded = await downloadAddon(repoUrl, token);
+  if (scrapp) addonFitsScrapp(downloaded, scrapp);
   const all = await readAll();
   const previous = all.find((item) => item.id === downloaded.id);
   downloaded.enabled = previous ? previous.enabled : true;
@@ -34,6 +50,20 @@ export async function setAddonEnabled(platform: string, id: string, enabled: boo
   if (!row) throw new Error('Add-on ist nicht installiert.');
   row.enabled = enabled;
   await AsyncStorage.setItem(KEY, JSON.stringify(all));
+}
+
+export async function updateAddon(platform: string, id: string, scrapp?: ScrappRef): Promise<CachedAddon> {
+  if (!addonsAvailable(platform)) throw new Error('Add-ons gibt es auf diesem Gerät nicht.');
+  const all = await readAll();
+  const row = all.find((item) => item.id === id);
+  if (!row) throw new Error('Add-on ist nicht installiert.');
+  const token = await readAddonGithubToken();
+  const downloaded = await downloadAddon(row.repoUrl, token);
+  if (scrapp) addonFitsScrapp(downloaded, scrapp);
+  downloaded.enabled = row.enabled;
+  const next = all.map((item) => (item.id === id ? downloaded : item));
+  await AsyncStorage.setItem(KEY, JSON.stringify(next));
+  return downloaded;
 }
 
 export async function removeAddon(platform: string, id: string): Promise<void> {
