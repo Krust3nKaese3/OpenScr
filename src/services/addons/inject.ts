@@ -25,6 +25,21 @@ export interface AddonInjection {
   loaded: { id: string; name: string; version: string; icon: string }[];
 }
 
+export function addonsForScrapp(addons: readonly CachedAddon[], scrapp: ScrappRef): CachedAddon[] {
+  return addons.filter((addon) => scrappMatchesTarget(addon.targetScrapp, scrapp));
+}
+
+/** Aktive Icons auf der Karte: höchstens `limit`, der Rest als Anzahl. */
+export function activeAddonMarks(
+  addons: readonly CachedAddon[],
+  scrapp: ScrappRef,
+  limit = 3,
+): { shown: { id: string; name: string; icon: string }[]; extra: number } {
+  const active = addonsForScrapp(addons, scrapp).filter((addon) => addon.enabled);
+  const shown = active.slice(0, limit).map((addon) => ({ id: addon.id, name: addon.name, icon: addon.icon }));
+  return { shown, extra: Math.max(0, active.length - shown.length) };
+}
+
 export function injectionForScrapp(addons: readonly CachedAddon[], scrapp: ScrappRef): AddonInjection {
   const icons: AddonInjection['icons'] = [];
   const errors: AddonInjection['errors'] = [];

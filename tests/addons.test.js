@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { parseAddonManifest, versionAtLeast, scrappMatchesTarget } = require('../src/services/addons/manifest.ts');
-const { injectionForScrapp } = require('../src/services/addons/inject.ts');
+const { parseAddonManifest, versionAtLeast, scrappMatchesTarget, addonFitsScrapp } = require('../src/services/addons/manifest.ts');
+const { injectionForScrapp, activeAddonMarks } = require('../src/services/addons/inject.ts');
 const { downloadAddon } = require('../src/services/addons/download.ts');
 const { addonsAvailable } = require('../src/services/iosPolicy.ts');
 
@@ -59,6 +59,17 @@ test('ein Add-on trifft die OpenScrapp und läuft nach ihrem Code', () => {
   assert.ok(ok.script.indexOf('var lib') < ok.script.indexOf('var started'));
   assert.ok(ok.script.includes('openscr:addon'));
   assert.strictEqual(ok.icons[0].icon, '♪');
+  assert.throws(() => addonFitsScrapp({ targetScrapp: 'other/nope', minScrappVersion: '1.0.0' }, scrapp), /targetScrapp/);
+  assert.throws(() => addonFitsScrapp({ targetScrapp: scrapp.id, minScrappVersion: '9.0.0' }, scrapp), /minScrappVersion/);
+  const marks = activeAddonMarks([
+    { id: 'a', name: 'A', version: '1.0.0', icon: '1', targetScrapp: scrapp.id, minScrappVersion: '1.0.0', entry: 'main.js', repoUrl: 'https://github.com/o/a', commitSha: 'a', enabled: true, files: {} },
+    { id: 'b', name: 'B', version: '1.0.0', icon: '2', targetScrapp: scrapp.id, minScrappVersion: '1.0.0', entry: 'main.js', repoUrl: 'https://github.com/o/b', commitSha: 'b', enabled: true, files: {} },
+    { id: 'c', name: 'C', version: '1.0.0', icon: '3', targetScrapp: scrapp.id, minScrappVersion: '1.0.0', entry: 'main.js', repoUrl: 'https://github.com/o/c', commitSha: 'c', enabled: true, files: {} },
+    { id: 'd', name: 'D', version: '1.0.0', icon: '4', targetScrapp: scrapp.id, minScrappVersion: '1.0.0', entry: 'main.js', repoUrl: 'https://github.com/o/d', commitSha: 'd', enabled: true, files: {} },
+    { id: 'e', name: 'E', version: '1.0.0', icon: '5', targetScrapp: scrapp.id, minScrappVersion: '1.0.0', entry: 'main.js', repoUrl: 'https://github.com/o/e', commitSha: 'e', enabled: false, files: {} },
+  ], scrapp);
+  assert.strictEqual(marks.shown.length, 3);
+  assert.strictEqual(marks.extra, 1);
 });
 
 test('download prüft addon.json über einen Ersatz für fetch', async () => {

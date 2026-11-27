@@ -58,10 +58,32 @@ import { GithubSession } from '../services/GithubSession';
 import { DeveloperModeModal } from '../components/DeveloperModeModal';
 import { FirstOpenScrappModal } from '../components/FirstOpenScrappModal';
 import { SourceCodeModal } from '../components/SourceCodeModal';
-import { showsCuratedCatalog } from '../services/iosPolicy';
+import { addonsAvailable, showsCuratedCatalog } from '../services/iosPolicy';
+import { activeAddonMarks, CachedAddon } from '../services/addons/inject';
+import { listAddons } from '../services/addons/store';
+import { AddonSheet } from '../components/AddonSheet';
 import { appearanceMode, setAppearance, useContainerTheme } from '../theme/containerTheme';
 import { NavGlyph, ScrappGlyph } from '../components/ScrappGlyph';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { notify } from '../services/notify';
+
+function AddonMarks({ rows, app, color, muted }: { rows: CachedAddon[]; app: MiniApp; color: string; muted: string }) {
+  const marks = activeAddonMarks(rows, {
+    id: app.id,
+    repoUrl: app.repoUrl,
+    name: app.manifest.name,
+    version: app.manifest.version,
+  });
+  if (!marks.shown.length) return <View />;
+  return (
+    <View style={styles.tileAddonIcons}>
+      {marks.shown.map((item) => (
+        <Text key={item.id} style={[styles.tileAddonIcon, { color }]} accessibilityLabel={item.name}>{item.icon}</Text>
+      ))}
+      {marks.extra > 0 ? <Text style={[styles.tileAddonMore, { color: muted }]}>+{marks.extra}</Text> : null}
+    </View>
+  );
+}
 
 function confirmForeign(message: string): Promise<boolean> {
   return new Promise((resolve) => {
@@ -93,6 +115,8 @@ export const HomeScreen: React.FC = () => {
   const [showPlayers, setShowPlayers] = useState(false);
   const [showStats, setShowStats] = useState(false);
   const [sourceApp, setSourceApp] = useState<MiniApp | null>(null);
+  const [addonApp, setAddonApp] = useState<MiniApp | null>(null);
+  const [addonRows, setAddonRows] = useState<CachedAddon[]>([]);
   const dismissedUpdates = useRef<Set<string>>(new Set());
   const [repoUrl, setRepoUrl] = useState('');
   const [loading, setLoading] = useState(false);
@@ -542,6 +566,18 @@ export const HomeScreen: React.FC = () => {
     return () => cancelAnimationFrame(frame);
   }, [tab, revealId, tileTick, bounce]);
 
+  const reloadAddons = useCallback(async () => {
+    if (!addonsAvailable(Platform.OS)) {
+      setAddonRows([]);
+      return;
+    }
+    setAddonRows(await listAddons(Platform.OS));
+  }, []);
+
+  useEffect(() => {
+    reloadAddons().catch(() => {});
+  }, [reloadAddons]);
+
   const renderApp = (app: MiniApp) => {
     const blocked = blockReasonFor(app.id, app.repoUrl, blocklist);
     const access = accessFor(app);
@@ -583,6 +619,19 @@ export const HomeScreen: React.FC = () => {
           {!locked && folder ? <Text style={[styles.tileMeta, { color: tokens.muted }]} numberOfLines={1}>{folder.name}</Text> : null}
           {devFolderFor(app.id) ? <Text style={[styles.tileMeta, { color: tokens.lime }]} numberOfLines={1}>Lokaler Ordner</Text> : null}
         </View>
+        {addonsAvailable(Platform.OS) ? (
+          <View style={styles.tileAddonRow}>
+            <AddonMarks rows={addonRows} app={app} color={tokens.text} muted={tokens.muted} />
+            <TouchableOpacity
+              accessibilityLabel={`Add-ons für ${app.manifest.name}`}
+              hitSlop={8}
+              onPress={() => setAddonApp(app)}
+              style={[styles.addonButton, { borderColor: tokens.line }]}
+            >
+              <Ionicons name="extension-puzzle-outline" size={16} color={tokens.text} />
+            </TouchableOpacity>
+          </View>
+        ) : null}
       </TouchableOpacity>
       </Animated.View>
     );
@@ -892,8 +941,22 @@ export const HomeScreen: React.FC = () => {
         visible={showDeveloper}
         ownReposOnly={ownReposOnly}
         onClose={() => setShowDeveloper(false)}
-        onChanged={() => { void refreshSession(); }}
+        onChanged={() => { void refreshSession(); void reloadAddons(); }}
       />
+      {addonApp && addonsAvailable(Platform.OS) ? (
+        <AddonSheet
+          platform={Platform.OS}
+          tokens={tokens}
+          scrapp={{
+            id: addonApp.id,
+            repoUrl: addonApp.repoUrl,
+            name: addonApp.manifest.name,
+            version: addonApp.manifest.version,
+          }}
+          onClose={() => setAddonApp(null)}
+          onChanged={() => { void reloadAddons(); }}
+        />
+      ) : null}
       <FirstOpenScrappModal visible={showGuide} onClose={() => setShowGuide(false)} />
       <PlayerNamesModal visible={showPlayers} onClose={() => setShowPlayers(false)} />
       <PlayerStatsModal visible={showStats} onClose={() => setShowStats(false)} />
@@ -982,6 +1045,11 @@ const styles = StyleSheet.create({
   tileActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   tileName: { fontSize: 16, fontWeight: '600' },
   tileMeta: { fontSize: 12, marginTop: 4 },
+  tileAddonRow: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 6, marginTop: 10 },
+  tileAddonIcons: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  tileAddonIcon: { fontSize: 14 },
+  tileAddonMore: { fontSize: 11, fontWeight: '700' },
+  addonButton: { width: 28, height: 28, borderRadius: 14, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   dot: { width: 8, height: 8, borderRadius: 4 },
   addTile: { borderRadius: 22, minHeight: 92, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
   addPlus: { fontSize: 28, fontWeight: '500', lineHeight: 32 },

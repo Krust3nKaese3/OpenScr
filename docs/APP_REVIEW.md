@@ -20,7 +20,7 @@ Danach gilt:
 
 Es gibt auf iOS keinen Katalog und keine Liste „Empfohlen“. `catalog/catalog.json` und jede andere ferne Datei können das nicht einschalten. Die Entscheidung ist `Platform.OS === 'ios'` im Programm (`src/services/iosPolicy.ts`).
 
-Add-ons gibt es auf iOS nicht. `addonsAvailable` in `src/services/iosPolicy.ts` ist auf iOS falsch. Die Oberfläche zum Hinzufügen, der Download, der Zwischenspeicher und das Einsetzen von Add-on-Code laufen dann nicht. Ein Add-on ist kein verstecktes iOS-Feature.
+Add-ons gibt es nur auf Android und in Entwicklungs-Builds (Web). In der iOS-Binary ist `addonsAvailable` in `src/services/iosPolicy.ts` falsch. Die Karten der Bibliothek zeigen dort weder die Add-on-Schaltfläche noch Icons aktiver Add-ons. Download, Zwischenspeicher und Einsetzen von Add-on-Code laufen nicht. Heruntergeladener ausführbarer Code wäre mit den Richtlinien 2.5.2 und 2.3.1 nicht vereinbar. Ein Add-on ist kein verstecktes iOS-Feature und kein Pfad in der iOS-Binary.
 
 „Melden“ öffnet eine E-Mail. Die Sperrliste kann ein Repository deaktivieren und nennt den Grund. Es gibt keinen OpenScr-Server.
 
@@ -82,7 +82,7 @@ A repository is installed only when both the owner in the URL and `owner.login` 
 
 The iOS app has no curated catalog and no “Empfohlen” list. `catalog/catalog.json` cannot enable catalog installs. The choice is `Platform.OS === 'ios'` in `src/services/iosPolicy.ts`. “Melden” opens an email. A blocklist can still disable a repository and show the reason. There is no OpenScr account server.
 
-Add-ons are not available on iOS. `addonsAvailable` in `src/services/iosPolicy.ts` is false there, so the app does not show add-on settings, does not download add-on repositories, and does not inject add-on code.
+Add-ons exist only on Android and development builds. On the iOS binary `addonsAvailable` in `src/services/iosPolicy.ts` is false. Library cards show neither the add-on button nor icons of active add-ons. The app does not download add-on repositories and does not inject add-on code. Downloaded executable code would conflict with Guidelines 2.5.2 and 2.3.1, so that path is absent from the iOS binary.
 
 The user can read the fetched HTML and JavaScript (the entry file first) from the app menu and from the development bar. The view is read-only. While an OpenScrapp runs, a persistent bar says “Entwicklungsumgebung · eigener Code” and offers Back and Source. The page uses at most 80% of the screen height.
 

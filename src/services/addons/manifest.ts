@@ -55,6 +55,23 @@ export function versionAtLeast(current: string, min: string): boolean {
   return true;
 }
 
+/** Wirft eine klare Meldung, wenn das Add-on nicht zu dieser OpenScrapp passt. */
+export function addonFitsScrapp(
+  addon: { targetScrapp: string; minScrappVersion: string },
+  scrapp: { id: string; repoUrl: string; name: string; version: string },
+): void {
+  if (!scrappMatchesTarget(addon.targetScrapp, scrapp)) {
+    throw new Error(
+      `targetScrapp ist „${addon.targetScrapp}“. Das passt nicht zu dieser OpenScrapp (${scrapp.name}).`,
+    );
+  }
+  if (!versionAtLeast(scrapp.version, addon.minScrappVersion)) {
+    throw new Error(
+      `minScrappVersion ist ${addon.minScrappVersion}. Diese OpenScrapp ist ${scrapp.version || 'ohne Version'}.`,
+    );
+  }
+}
+
 export function scrappMatchesTarget(
   target: string,
   app: { id: string; repoUrl: string; name: string },
