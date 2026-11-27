@@ -17,6 +17,12 @@
       "ageRating": "Empfehlung: ohne Altersbeschränkung"
     },
     {
+      "name": "Imposter Dance",
+      "repoUrl": "https://github.com/Krust3nKaese3/ImposterDanceScrapp",
+      "description": "Alle tanzen zum selben 10-Sekunden-Schnipsel. Der Imposter hört nur die Ansage, danach wird abgestimmt.",
+      "ageRating": "Empfehlung: ohne Altersbeschränkung"
+    },
+    {
       "name": "Würfel Roller",
       "repoUrl": "https://github.com/Krust3nKaese3/EveryRollDice",
       "description": "Würfle mit 1-6 Würfeln, mit Schüttel-Funktion und Historie.",

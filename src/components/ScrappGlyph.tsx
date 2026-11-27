@@ -1,10 +1,11 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 
-type Kind = 'moon' | 'note' | 'bolt' | 'die';
+type Kind = 'moon' | 'note' | 'dance' | 'bolt' | 'die';
 
 function kindFor(name: string): Kind {
   const lower = name.toLowerCase();
   if (lower.includes('wolf') || lower.includes('wer')) return 'moon';
+  if (lower.includes('dance') || lower.includes('tanz')) return 'dance';
   if (lower.includes('song') || lower.includes('musik') || lower.includes('spotify')) return 'note';
   if (lower.includes('macro')) return 'bolt';
   if (lower.includes('demo') || lower.includes('dice') || lower.includes('würf')) return 'die';
@@ -16,6 +17,7 @@ function kindFor(name: string): Kind {
 const SCRAPP_ICONS = {
   moon: 'moon-outline',
   note: 'musical-note-outline',
+  dance: 'musical-notes-outline',
   bolt: 'flash-outline',
   die: 'dice-outline',
 } as const;

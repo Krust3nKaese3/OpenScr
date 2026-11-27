@@ -32,10 +32,12 @@ import { PlayerStatsModal } from '../components/PlayerStatsModal';
 
 const SONG_DEV_FOLDER = 'E:\\git_projects\\mobile_apps\\GuessTheSongScrapp';
 const WOLF_DEV_FOLDER = 'E:\\git_projects\\mobile_apps\\WerwolfScrapp';
+const DANCE_DEV_FOLDER = 'E:\\git_projects\\mobile_apps\\ImposterDanceScrapp';
 
 function devFolderPlaceholder(app: { manifest?: { name?: string }; repoUrl?: string } | null): string {
   const blob = `${app?.manifest?.name || ''} ${app?.repoUrl || ''}`.toLowerCase();
   if (blob.includes('werwolf')) return WOLF_DEV_FOLDER;
+  if (blob.includes('imposter')) return DANCE_DEV_FOLDER;
   return SONG_DEV_FOLDER;
 }
 import {
@@ -415,7 +417,7 @@ export const HomeScreen: React.FC = () => {
     const wanted = devFolderPlaceholder(actionApp);
     const normalized = saved.replace(/\//g, '\\').toLowerCase();
     const song = SONG_DEV_FOLDER.toLowerCase();
-    if (!saved || (wanted === WOLF_DEV_FOLDER && normalized === song)) setFolderDraft(wanted);
+    if (!saved || (wanted !== SONG_DEV_FOLDER && normalized === song)) setFolderDraft(wanted);
     else setFolderDraft(saved);
   }, [actionApp]);
   const [refreshingId, setRefreshingId] = useState<string | null>(null);

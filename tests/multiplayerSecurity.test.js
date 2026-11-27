@@ -307,3 +307,30 @@ test('TCP-Sitzung weist Raten, Übernahme, Flut und offene Sockets ab', async ()
     await resetMultiplayerForTests();
   }
 });
+
+test('ein anderer Raum lässt sich beenden, damit diese OpenScrapp hostet', async () => {
+  await resetMultiplayerForTests();
+  const store = createMemoryRoomStore();
+  configureMultiplayer({
+    store,
+    discovery: { async publish() {}, async unpublish() {}, async browse() {} },
+    keepAlive: async () => {},
+  });
+  let closed = false;
+  const transport = {
+    async localIpv4() { return '192.168.1.20'; },
+    listen() { return Promise.resolve({ port: 4040, close() { closed = true; } }); },
+    async connect() { throw new Error('nein'); },
+  };
+  try {
+    await hostMultiplayer('wolf', () => {}, { name: 'Ada' }, transport);
+    await assert.rejects(() => hostMultiplayer('song', () => {}, { name: 'Bea' }, transport), /anderer Raum/);
+    assert.strictEqual((await endRoom('song')).ended, true);
+    assert.strictEqual(closed, true);
+    const next = await hostMultiplayer('song', () => {}, { name: 'Bea' }, transport);
+    assert.ok(next.roomCode);
+    assert.strictEqual(await store.read('wolf'), null);
+  } finally {
+    await resetMultiplayerForTests();
+  }
+});

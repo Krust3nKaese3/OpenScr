@@ -13,6 +13,7 @@ und halte dich an den Guide, die Bridge-API und, falls Mehrspieler vorkommt, an 
 Lege openscr.json, eine Einstiegsdatei und nur die Berechtigungen an, die du brauchst.
 Nutze ausschließlich window.OpenScrBridge. Schreibe Namen und Spielnachrichten mit textContent, nie mit innerHTML.
 Beim Mehrspieler: Callbacks vor host/join/resume, der Host ist allein zuständig, den Spielstand selbst in OpenScrBridge.storage speichern und nach resume neu senden, höchstens 32 KiB JSON. Der Raum endet mit endRoom, nicht beim Schließen der App.
+Die QR-Seite nicht selbst bauen. window.OpenScrQr einhängen, siehe Abschnitt „QR-Seite“. Host-Fehler unverändert in note legen.
 ```
 
 ## Dateien
@@ -100,6 +101,49 @@ const back = await mp.resume();
 await mp.leave();
 await mp.endRoom();
 ```
+
+### QR-Seite
+
+OpenScr setzt `window.OpenScrQr` in jede OpenScrapp. Das ist die Einladung: Code scannen, Host Multiplayer, Download, WLAN, Hotspot, Kopieren, Teilen, Hosting beenden, und der Button „Alten Raum beenden“ samt Ladeanzeige, wenn schon ein anderer Raum läuft. Diese Fläche nicht nachbauen.
+
+Die Seite enthält nur die eigene Überschrift und den Einhängepunkt. Keine Banner, keine zweite Button-Reihe.
+
+```javascript
+function renderQr() {
+  return '<header><h1>Mein Spiel</h1></header><div class="stack"><div id="openscr-qr"></div></div>';
+}
+
+function mountQr() {
+  var el = document.getElementById('openscr-qr');
+  if (!el || !window.OpenScrQr) return;
+  window.OpenScrQr.attach(el, {
+    onScan: function () {},
+    onHost: function () { paintHost(); },
+    onDownload: function () {},
+    onWlan: function () {},
+    onHotspot: function () {},
+    onHotspotShow: function (draft) {},
+    onCopy: function () {},
+    onShare: function () {},
+    onStop: function () {},
+    onApprove: function (id) {},
+    onDeny: function (id) {}
+  });
+  window.OpenScrQr.setModel({
+    open: 'host',
+    hostLink: 'wlan',
+    ssid: '',
+    pass: '',
+    note: '',
+    image: '',
+    share: '',
+    copied: false,
+    requests: []
+  });
+}
+```
+
+`onHost` startet den Raum. Schlägt das fehl, den Text der Ablehnung unverändert in `note` schreiben und einmal neu zeichnen. Der Satz „Auf diesem Gerät läuft schon ein anderer Raum.“ muss genau so ankommen, sonst fehlt der gemeinsame Button. `onStop` beendet nur den Raum dieser OpenScrapp. Den Raum einer anderen App beendet OpenScrQr selbst.
 
 `maxPlayers` ist 2 bis 16, Vorgabe 8, der Host zählt mit. Namen höchstens 24 Zeichen. `discoverable` und `joinApproval` sind standardmäßig an. `send` ohne `to` geht vom Gast an den Host. Der Host muss `to` setzen oder `broadcast` nutzen. Es gibt kein Echo an den Absender.
 

@@ -9,6 +9,10 @@ export const QR_SHELL_SOURCE = String.raw`
     + '.oqr-btn.solid{background:#A3E635;color:#111;border:0}'
     + '.oqr-btn.ghost{background:#1c1c22;border:0;border-radius:14px}'
     + '.oqr-btn.bad{background:#3f1d1d;color:#FECACA;border:0}'
+    + '.oqr-btn{display:inline-flex;align-items:center;justify-content:center;gap:10px}'
+    + '.oqr-btn:disabled{opacity:.72}'
+    + '.oqr-spin{width:18px;height:18px;border-radius:50%;border:2px solid rgba(254,202,202,.35);border-top-color:#FECACA;animation:oqr-spin .7s linear infinite;flex:0 0 18px}'
+    + '@keyframes oqr-spin{to{transform:rotate(360deg)}}'
     + '.oqr-main{display:flex;align-items:center;justify-content:space-between;width:100%;text-align:left}'
     + '.oqr-main svg{width:28px;height:28px;flex:0 0 28px}'
     + '.oqr-panel{display:flex;flex-direction:column;gap:12px}'
@@ -21,6 +25,21 @@ export const QR_SHELL_SOURCE = String.raw`
   var handlers = {};
   var model = {};
   var bound = false;
+  var busy = false;
+  var pending = null;
+  var started = 0;
+  function reveal() {
+    var wait = Math.max(0, 450 - (Date.now() - started));
+    setTimeout(function () {
+      if (!busy) return;
+      busy = false;
+      if (pending) {
+        model = pending;
+        pending = null;
+      }
+      if (root) shell();
+    }, wait);
+  }
   function esc(value) {
     return String(value == null ? '' : value).replace(/[&<>"']/g, function (ch) {
       return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch];
@@ -49,7 +68,11 @@ export const QR_SHELL_SOURCE = String.raw`
       + (model.note ? '<p class="oqr-note">' + esc(model.note) + '</p>' : '')
       + (model.image ? '<img alt="QR-Code" src="' + esc(model.image) + '">' : '')
       + links()
-      + '<button type="button" class="oqr-btn bad" data-qr="stop">Hosting beenden</button>';
+      + (busy
+        ? '<button type="button" class="oqr-btn bad" data-qr="end-other" disabled aria-busy="true"><span class="oqr-spin" aria-hidden="true"></span>Raum wird beendet</button>'
+        : (model.note && String(model.note).indexOf('anderer Raum') !== -1
+          ? '<button type="button" class="oqr-btn bad" data-qr="end-other">Alten Raum beenden</button>'
+          : '<button type="button" class="oqr-btn bad" data-qr="stop">Hosting beenden</button>'));
   }
   function downloadBody() {
     if (model.open !== 'download') return '';
@@ -92,6 +115,27 @@ export const QR_SHELL_SOURCE = String.raw`
       if (act === 'copy' && handlers.onCopy) handlers.onCopy();
       if (act === 'share' && handlers.onShare) handlers.onShare();
       if (act === 'stop' && handlers.onStop) handlers.onStop();
+      if (act === 'end-other') {
+        if (busy) return;
+        busy = true;
+        pending = null;
+        started = Date.now();
+        shell();
+        var bridge = window.OpenScrBridge || window.EveryAppBridge;
+        var mp = bridge && bridge.multiplayer;
+        var job = mp && mp.endRoom ? mp.endRoom() : Promise.resolve();
+        Promise.resolve(job).then(function () {
+          model.note = '';
+          if (handlers.onHost) handlers.onHost();
+        }, function (error) {
+          pending = {
+            open: 'host',
+            hostLink: model.hostLink,
+            note: (error && error.message) || 'Der alte Raum läuft noch.'
+          };
+          reveal();
+        });
+      }
       if (act === 'approve' && handlers.onApprove) handlers.onApprove(id);
       if (act === 'deny' && handlers.onDeny) handlers.onDeny(id);
     }, true);
@@ -113,6 +157,12 @@ export const QR_SHELL_SOURCE = String.raw`
       bind();
     },
     setModel: function (next) {
+      if (busy) {
+        pending = next || {};
+        if (root) shell();
+        reveal();
+        return;
+      }
       model = next || {};
       if (root) shell();
     }

@@ -539,6 +539,17 @@ export async function leaveMultiplayer(appId?: string): Promise<{ left: boolean 
 }
 
 export async function endRoom(appId: string): Promise<{ ended: boolean }> {
+  if (live && live.appId !== appId) {
+    const other = live;
+    if (other.role === 'host') {
+      const frame = encodeFrame({ t: 'error', code: 'ended', message: 'Der Host hat den Raum beendet.' });
+      other.links.forEach((link) => link.send(frame));
+    } else if (other.guestLink) {
+      try { other.guestLink.send(encodeFrame({ t: 'leave' })); } catch { /* Die Verbindung ist schon weg. */ }
+    }
+    await shutdown(other, true);
+    return { ended: true };
+  }
   if (!live || live.appId !== appId || live.role !== 'host') {
     const saved = await activeStore().read(appId);
     if (saved?.role === 'host') await activeStore().delete(appId);

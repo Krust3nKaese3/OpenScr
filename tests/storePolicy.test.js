@@ -34,10 +34,11 @@ const catalog = bundledCatalogFile();
 const blocklist = bundledBlocklistFile();
 const sha = 'a'.repeat(40);
 
-test('bundled catalog lists the four curated repos', () => {
+test('bundled catalog lists the curated repos', () => {
   for (const url of [
     'https://github.com/Krust3nKaese3/WerwolfScrapp',
     'https://github.com/Krust3nKaese3/GuessTheSongScrapp',
+    'https://github.com/Krust3nKaese3/ImposterDanceScrapp',
     'https://github.com/Krust3nKaese3/EveryRollDice',
     'https://github.com/Krust3nKaese3/MacroScrapp',
   ]) {
@@ -49,6 +50,7 @@ test('bundled catalog lists the four curated repos', () => {
   }
   assert.strictEqual(catalogEntryFor('https://github.com/Krust3nKaese3/WerwolfScrapp', catalog).name, 'WerwolfScrapp');
   assert.strictEqual(catalogEntryFor('https://github.com/Krust3nKaese3/GuessTheSongScrapp', catalog).name, 'GuessTheSongScrapp');
+  assert.strictEqual(catalogEntryFor('https://github.com/Krust3nKaese3/ImposterDanceScrapp', catalog).name, 'Imposter Dance');
   assert.strictEqual(catalogEntryFor('https://github.com/Krust3nKaese3/MacroScrapp', catalog).name, 'MacroScrapp');
   assert.strictEqual(catalogEntryFor('https://github.com/Krust3nKaese3/EveryRollDice', catalog).name, 'Würfel Roller');
 });
