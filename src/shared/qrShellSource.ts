@@ -149,9 +149,21 @@ export const QR_SHELL_SOURCE = String.raw`
         var bridge = window.OpenScrBridge || window.EveryAppBridge;
         var mp = bridge && bridge.multiplayer;
         var job = mp && mp.endRoom ? mp.endRoom() : Promise.resolve();
-        Promise.resolve(job).then(function () {
+        var timed = new Promise(function (resolve, reject) {
+          var timer = setTimeout(function () { reject(new Error('Der alte Raum antwortet nicht.')); }, 8000);
+          Promise.resolve(job).then(function (value) {
+            clearTimeout(timer);
+            resolve(value);
+          }, function (error) {
+            clearTimeout(timer);
+            reject(error);
+          });
+        });
+        timed.then(function () {
           model.note = '';
-          if (handlers.onHost) handlers.onHost();
+          return handlers.onHost ? handlers.onHost() : null;
+        }).then(function () {
+          if (busy) reveal();
         }, function (error) {
           pending = {
             open: 'host',

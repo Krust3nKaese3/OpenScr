@@ -81,7 +81,6 @@ import { requestCameraCapture } from '../services/cameraCapture';
 import { EXPORT_MIME_DEFAULT, safeExportFileName } from '../services/shareExport';
 import { NOTIFICATION_APP_KEY, notificationTitle } from '../services/scrappNotify';
 import * as FileSystem from 'expo-file-system/legacy';
-import * as Sharing from 'expo-sharing';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -311,9 +310,17 @@ export class NativeCapabilities {
       const uri = `${dir}${fileName}`;
       await FileSystem.writeAsStringAsync(uri, contents);
       const mimeType = mime || EXPORT_MIME_DEFAULT;
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri, { mimeType, dialogTitle: fileName, UTI: 'public.data' });
-      } else {
+      let shared = false;
+      try {
+        const Sharing = await import('expo-sharing');
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(uri, { mimeType, dialogTitle: fileName, UTI: 'public.data' });
+          shared = true;
+        }
+      } catch {
+        shared = false;
+      }
+      if (!shared) {
         await Share.share({ url: uri, message: fileName, title: fileName });
       }
       return { name: fileName };
@@ -535,7 +542,15 @@ export class NativeCapabilities {
     showGameQr: () => showMultiplayerQr(this.appId, 'game'),
     showHotspotQr: () => showMultiplayerQr(this.appId, 'hotspot'),
     codes: () => multiplayerCodes(this.appId),
-    qrDataUrl: (text: string) => QRCode.toDataURL(String(text || ''), { margin: 1, width: 280, color: { dark: '#0B0B0F', light: '#FFFFFF' } }),
+    qrDataUrl: async (text: string) => {
+      const svg = await QRCode.toString(String(text || ''), {
+        type: 'svg',
+        margin: 1,
+        width: 280,
+        color: { dark: '#0B0B0F', light: '#FFFFFF' },
+      });
+      return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+    },
     discover: () => discoverMultiplayer(this.appId, (event, data) => this.eventEmitter.emit(event, data)),
     stopDiscovery: () => stopDiscoveryMultiplayer(),
     setDiscoverable: (on: boolean) => setDiscoverableMultiplayer(this.appId, on),
