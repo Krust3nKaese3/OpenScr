@@ -3,7 +3,7 @@ import { View, StyleSheet, StatusBar, BackHandler, ActivityIndicator, Text, Scro
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import WebView, { WebViewMessageEvent } from 'react-native-webview';
 import * as ScreenOrientation from 'expo-screen-orientation';
-import { getInfoAsync, listAppFiles, readAsStringAsync } from '../services/appFiles';
+import { getInfoAsync, listAppFiles, readAsStringAsync, readDirectoryAsync } from '../services/appFiles';
 import { devFolderFor, listDevFiles, readDevAsset } from '../services/devFolder';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Clipboard from 'expo-clipboard';
@@ -183,7 +183,26 @@ const MiniAppRunnerBase: React.FC<MiniAppRunnerProps> = ({ app, onClose, onLeave
     setGuestShellMeta(app.id, { name: app.manifest.name, repoUrl: app.repoUrl || '' });
     setGuestContent(app.id, {
       entry,
-      list: async () => (await listDevFiles(app.id))?.files || listAppFiles(app.localPath),
+      list: async () => {
+        const fromDev = await listDevFiles(app.id);
+        if (fromDev?.files?.length) return fromDev.files;
+        const rels: string[] = [];
+        const walk = async (dir: string, prefix: string) => {
+          const names = await readDirectoryAsync(dir);
+          for (const name of names) {
+            if (name === '.git' || name === 'node_modules') continue;
+            const rel = prefix ? `${prefix}/${name}` : name;
+            const uri = `${dir.replace(/\/$/, '')}/${name}`;
+            const info = await getInfoAsync(uri);
+            if (!info.exists) continue;
+            if (info.isDirectory) await walk(uri, rel);
+            else rels.push(rel);
+          }
+        };
+        try { await walk(app.localPath, ''); } catch { /* Die Installation listet hier nicht. */ }
+        if (entry && !rels.includes(entry)) rels.unshift(entry);
+        return rels.length ? rels : listAppFiles(app.localPath);
+      },
       read: async (rel) => {
         const file = await readMiniAppAsset(app.id, app.localPath, rel || entry);
         if (!file) return null;

@@ -98,6 +98,21 @@ export const QR_SHELL_SOURCE = String.raw`
   function panel(act, label, body) {
     return '<div class="oqr-panel"><button type="button" class="oqr-btn oqr-main" data-qr="' + act + '"><span>' + label + '</span>' + icon + '</button>' + body + '</div>';
   }
+  function shareText() {
+    var text = model.share || '';
+    if (!text) return;
+    var bridge = window.OpenScrBridge || window.EveryAppBridge;
+    var native = !isGuest() && bridge && bridge.share && typeof bridge.share.text === 'function';
+    if (native) {
+      Promise.resolve(bridge.share.text(text)).catch(function (error) {
+        model.note = (error && error.message) || 'Teilen ist nicht verfügbar.';
+        if (root) shell();
+      });
+      return;
+    }
+    if (handlers.onShare) handlers.onShare();
+    else if (navigator.share) navigator.share({ text: text }).catch(function () {});
+  }
   function openHostIfLive() {
     if (isGuest() || model.open || !handlers.onHost) return;
     var bridge = window.OpenScrBridge || window.EveryAppBridge;
@@ -138,7 +153,7 @@ export const QR_SHELL_SOURCE = String.raw`
       if (act === 'wlan' && handlers.onWlan) handlers.onWlan();
       if (act === 'hotspot' && handlers.onHotspot) handlers.onHotspot();
       if (act === 'copy' && handlers.onCopy) handlers.onCopy();
-      if (act === 'share' && handlers.onShare) handlers.onShare();
+      if (act === 'share') shareText();
       if (act === 'stop' && handlers.onStop) handlers.onStop();
       if (act === 'end-other') {
         if (busy) return;

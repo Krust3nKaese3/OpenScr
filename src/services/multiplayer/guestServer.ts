@@ -78,13 +78,7 @@ export async function openGuestServer(opts: {
     bindHttp(conn, opts, () => live.delete(conn));
   };
   const preferred = opts.preferredPort && opts.preferredPort >= 1024 ? opts.preferredPort : 0;
-  let server: { port: number; close(): void };
-  try {
-    server = await opts.listen(onConnection, preferred);
-  } catch (error) {
-    if (!preferred) throw error;
-    server = await opts.listen(onConnection, 0);
-  }
+  const server = await listenPort(opts.listen, onConnection, preferred);
   return {
     port: server.port,
     close() {
@@ -374,6 +368,24 @@ function createBrowserLink(conn: ByteConn, fail: () => void) {
 
 const TCP_MISSING = 'Lokaler Mehrspieler braucht einen neuen Entwicklungs-Build mit react-native-tcp-socket.';
 
+async function listenPort(
+  listen: ByteListen,
+  onConnection: (conn: ByteConn) => void,
+  port: number,
+): Promise<{ port: number; close(): void }> {
+  let last: unknown;
+  const tries = port ? 8 : 1;
+  for (let attempt = 0; attempt < tries; attempt += 1) {
+    try {
+      return await listen(onConnection, port);
+    } catch (error) {
+      last = error;
+      if (attempt + 1 < tries) await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  }
+  throw last instanceof Error ? last : new Error('Der Browser-Server ist nicht gestartet.');
+}
+
 export function tcpByteListen(onConnection: (conn: ByteConn) => void, port: number): Promise<{ port: number; close(): void }> {
   let loaded: { default?: TcpApi; createServer?: TcpApi['createServer'] };
   try {
@@ -396,18 +408,26 @@ export function tcpByteListen(onConnection: (conn: ByteConn) => void, port: numb
     if (typeof document === 'undefined') return Promise.reject(new Error(TCP_MISSING));
     return Promise.resolve({ port: port || 8099, close() {} });
   }
+  const prior = (globalThis as { __openscrTcp?: { close(): void } }).__openscrTcp;
+  if (prior) {
+    try { prior.close(); } catch { /* Der alte Server aus einem Reload ist schon weg. */ }
+  }
   return new Promise((resolve, reject) => {
     try {
     server.on('error', (err) => reject(err instanceof Error ? err : new Error('Der Browser-Server ist nicht gestartet.')));
     server.listen({ port, host: '0.0.0.0' }, () => {
       const address = server.address();
       const chosen = address && typeof address.port === 'number' ? address.port : port;
-      resolve({
+      const handle = {
         port: chosen,
         close() {
+          const slot = globalThis as { __openscrTcp?: { close(): void } };
+          if (slot.__openscrTcp === handle) delete slot.__openscrTcp;
           try { server.close(); } catch { /* schon zu */ }
         },
-      });
+      };
+      (globalThis as { __openscrTcp?: { close(): void } }).__openscrTcp = handle;
+      resolve(handle);
     });
     } catch (error) {
       if (typeof document === 'undefined') reject(error instanceof Error ? error : new Error(TCP_MISSING));
@@ -473,7 +493,35 @@ function bindTcp(socket: TcpSocket): ByteConn {
         }
         try {
           const buf = typeof Buffer !== 'undefined' ? Buffer.from(body) : body;
-          socket.write(buf, undefined, () => resolve());
+          let offset = 0;
+          const step = 16 * 1024;
+          const writeNext = () => {
+            if (closed || offset >= buf.length) {
+              resolve();
+              return;
+            }
+            const end = Math.min(buf.length, offset + step);
+            const piece = buf.slice(offset, end);
+            offset = end;
+            let settled = false;
+            const done = () => {
+              if (settled) return;
+              settled = true;
+              writeNext();
+            };
+            const timer = setTimeout(done, 1000);
+            try {
+              socket.write(piece, undefined, () => {
+                clearTimeout(timer);
+                done();
+              });
+            } catch (error) {
+              clearTimeout(timer);
+              noteGuest(error instanceof Error ? error.message : 'Senden fehlgeschlagen');
+              resolve();
+            }
+          };
+          writeNext();
         } catch (error) {
           noteGuest(error instanceof Error ? error.message : 'Senden fehlgeschlagen');
           resolve();

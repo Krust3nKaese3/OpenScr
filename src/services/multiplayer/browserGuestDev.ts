@@ -8,7 +8,23 @@ import type { GuestContent } from './guestContent';
 import type { GuestServer } from './guestServer';
 import type { MpLink } from './transport';
 
-const DEV = 'http://127.0.0.1:8791';
+const DEV_PORT = 8791;
+
+export function devGuestOrigin(): string {
+  if (typeof document !== 'undefined') return `http://127.0.0.1:${DEV_PORT}`;
+  try {
+    const Constants = require('expo-constants').default;
+    const hostUri = Constants?.expoGoConfig?.debuggerHost
+      || Constants?.expoConfig?.hostUri
+      || Constants?.manifest?.debuggerHost
+      || '';
+    const host = String(hostUri).split(':')[0];
+    if (host) return `http://${host}:${DEV_PORT}`;
+  } catch {
+    /* Ohne Metro bleibt der Server auf dem Handy. */
+  }
+  return '';
+}
 
 function bytesToBase64(bytes: Uint8Array): string {
   let binary = '';
@@ -29,8 +45,11 @@ export async function openBrowserDevGuest(opts: {
   room: string;
   content: GuestContent;
   onLink: (link: MpLink) => void;
+  origin?: string;
 }): Promise<GuestServer & { ip: string }> {
-  const paths = opts.content.list ? await opts.content.list() : [opts.content.entry];
+  const DEV = opts.origin || devGuestOrigin() || `http://127.0.0.1:${DEV_PORT}`;
+  const listed = opts.content.list ? await opts.content.list() : [];
+  const paths = listed.includes(opts.content.entry) ? listed : [opts.content.entry, ...listed];
   const files: { path: string; mime: string; base64: string }[] = [];
   for (const rel of paths) {
     const file = await opts.content.read(rel);
@@ -64,7 +83,8 @@ export async function openBrowserDevGuest(opts: {
   });
   if (!response.ok) throw new Error((await response.text()) || 'Der Gastserver im Browser ist nicht gestartet.');
   const info = await response.json() as { port: number; ip: string };
-  const hostSocket = new WebSocket(`ws://127.0.0.1:${info.port}/openscr-dev-host?token=${opts.token}`);
+  const origin = new URL(DEV);
+  const hostSocket = new WebSocket(`${origin.protocol === 'https:' ? 'wss:' : 'ws:'}//${origin.host}/openscr-dev-host?token=${opts.token}`);
   const links = new Map<string, LiveLink>();
   const waiting = new Map<string, string[]>();
   await new Promise<void>((resolve, reject) => {

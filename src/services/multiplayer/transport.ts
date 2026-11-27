@@ -22,7 +22,7 @@ export interface MpServer {
 export interface MpTransport {
   listen(onConnection: (link: MpLink) => void): Promise<MpServer>;
   connect(host: string, port: number): Promise<MpLink>;
-  localIpv4(): Promise<string>;
+  localIpv4(prefer?: string): Promise<string>;
 }
 
 const MISSING = 'Lokaler Mehrspieler braucht einen neuen Entwicklungs-Build mit react-native-tcp-socket.';
@@ -219,8 +219,10 @@ export const tcpTransport: MpTransport = {
     });
   },
 
-  async localIpv4() {
-    const chosen = chooseLanIPv4(await readCandidates());
+  async localIpv4(prefer?: string) {
+    const candidates = await readCandidates();
+    if (prefer && isPrivateIPv4(prefer) && candidates.some((row) => row.ip === prefer)) return prefer;
+    const chosen = chooseLanIPv4(candidates);
     if (chosen) return chosen;
     const fallback = await readFallbackIp();
     if (fallback) return fallback;

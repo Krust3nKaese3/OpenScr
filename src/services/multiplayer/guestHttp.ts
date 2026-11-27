@@ -516,6 +516,13 @@ export const GUEST_SHIM_SOURCE = `(function () {
       return;
     }
     if (frame.t === 'error') {
+      if (frame.code === 'busy') {
+        giveUp = true;
+        showBusy();
+        settleJoin(null, new Error('Du bist schon in einem anderen Tab dabei.'));
+        if (!welcomed) settleResume(null);
+        return;
+      }
       var fatal = frame.code === 'auth' || frame.code === 'ended' || frame.code === 'denied' || frame.code === 'full' || frame.code === 'player';
       if (fatal) {
         giveUp = true;
@@ -573,6 +580,18 @@ export const GUEST_SHIM_SOURCE = `(function () {
   function hideName() {
     var box = document.getElementById('openscr-guest-name');
     if (box && box.parentNode) box.parentNode.removeChild(box);
+  }
+  function showBusy() {
+    hideName();
+    if (document.getElementById('openscr-guest-busy')) return;
+    var box = document.createElement('div');
+    box.id = 'openscr-guest-busy';
+    box.setAttribute('style', 'position:fixed;inset:0;z-index:100000;background:#0B0B0F;color:#f4f4f5;display:flex;align-items:center;justify-content:center;padding:28px;text-align:center;font:18px/1.45 sans-serif');
+    var text = document.createElement('p');
+    text.textContent = 'Du bist schon in einem anderen Tab dabei. Schließ ihn, wenn du hier spielen willst.';
+    text.setAttribute('style', 'max-width:28rem;margin:0');
+    box.appendChild(text);
+    (document.body || document.documentElement).appendChild(box);
   }
   function showName() {
     if (document.getElementById('openscr-guest-name')) return;

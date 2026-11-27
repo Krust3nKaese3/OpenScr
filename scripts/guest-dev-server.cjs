@@ -246,6 +246,7 @@ if (global.__openscrGuestDev) {
             files,
             hosts: previous ? previous.hosts : new Set(),
             guests: previous ? previous.guests : new Map(),
+            pending: previous ? previous.pending : new Map(),
           });
           const ip = lanIp();
           console.log(`[openscr-guest-dev] Raum ${body.room} auf http://${ip}:${PORT}/g/${token}/`);
@@ -316,6 +317,13 @@ if (global.__openscrGuestDev) {
         return;
       }
       room.hosts.add(socket);
+      room.guests.forEach((guest, id) => {
+        sendText(socket, JSON.stringify({ t: 'guest', id }));
+        (room.pending.get(id) || []).forEach((line) => {
+          sendText(socket, JSON.stringify({ t: 'text', id, data: line }));
+        });
+        room.pending.delete(id);
+      });
       attach(socket, (text) => {
         let message;
         try { message = JSON.parse(text); } catch { return; }
@@ -323,7 +331,14 @@ if (global.__openscrGuestDev) {
         if (!guest) return;
         if (message.t === 'text') sendText(guest, message.data);
         if (message.t === 'close') guest.end();
-      }, () => room.hosts.delete(socket));
+      }, () => {
+        room.hosts.delete(socket);
+        if (room.hosts.size === 0) {
+          room.guests.forEach((guest) => {
+            try { guest.end(); } catch { /* Der Tab verbindet sich neu. */ }
+          });
+        }
+      });
       return;
     }
     const parts = url.pathname.split('/');
@@ -340,9 +355,17 @@ if (global.__openscrGuestDev) {
     room.guests.set(id, socket);
     room.hosts.forEach((host) => sendText(host, JSON.stringify({ t: 'guest', id })));
     attach(socket, (text) => {
+      if (room.hosts.size === 0) {
+        const queued = room.pending.get(id) || [];
+        queued.push(text);
+        if (queued.length > 32) queued.shift();
+        room.pending.set(id, queued);
+        return;
+      }
       room.hosts.forEach((host) => sendText(host, JSON.stringify({ t: 'text', id, data: text })));
     }, () => {
       room.guests.delete(id);
+      room.pending.delete(id);
       room.hosts.forEach((host) => sendText(host, JSON.stringify({ t: 'close', id })));
     });
   });

@@ -26,6 +26,8 @@ export interface StoredRoom {
   snapshotSeq?: number;
   /** Port des Browser-Servers. Nach einem Neustart wird derselbe Port versucht. */
   guestPort?: number;
+  /** LAN-Adresse, die schon in den offenen Gast-Links steht. */
+  lanIp?: string;
   updatedAt: number;
 }
 

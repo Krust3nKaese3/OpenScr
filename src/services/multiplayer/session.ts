@@ -15,8 +15,8 @@ import { createMemoryRoomStore, loadUsable, publicResume, type PublicResume, typ
 import { setHostKeepAlive } from './hostKeepAlive';
 import { clearGuestContent, guestContent } from './guestContent';
 import { assertGuestServing, openGuestServer, tcpByteListen, type ByteListen, type GuestServer } from './guestServer';
-import { shareableGameUrl } from './guestHttp';
-import { openBrowserDevGuest } from './browserGuestDev';
+import { gameUrl, shareableGameUrl } from './guestHttp';
+import { devGuestOrigin, openBrowserDevGuest } from './browserGuestDev';
 import { clearInviteDraft } from './invite';
 import { readHostBattery, stopHotspot } from './lanShare';
 import { HOST_AWAKE_TAG, setKeepAwake } from '../keepAwake';
@@ -299,7 +299,8 @@ async function watchBattery(session: LiveSession): Promise<void> {
 
 async function startBrowserGuest(session: LiveSession): Promise<void> {
   if (session.role !== 'host') return;
-  if (typeof document !== 'undefined') {
+  const devOrigin = (typeof __DEV__ === 'undefined' || __DEV__) ? devGuestOrigin() : '';
+  if (devOrigin) {
     const content = guestContent(session.appId);
     if (!content) {
       session.guestPhase = 'failed';
@@ -313,6 +314,7 @@ async function startBrowserGuest(session: LiveSession): Promise<void> {
         appId: session.appId,
         room: session.roomCode,
         content,
+        origin: devOrigin,
         onLink: (link) => {
           if (!live || live !== session || session.leaving) {
             link.close();
@@ -328,62 +330,96 @@ async function startBrowserGuest(session: LiveSession): Promise<void> {
       session.guestPhase = 'ready';
       session.guestError = '';
       showHost(session);
+      return;
     } catch (error) {
-      session.guestPhase = 'failed';
-      session.gameUrl = '';
-      session.guestError = error instanceof Error ? error.message : 'Der Gastserver im Browser ist nicht gestartet.';
-      console.warn(`[openscr-mp] ${session.guestError}`);
-      showHost(session);
+      if (typeof document !== 'undefined') {
+        session.guestPhase = 'failed';
+        session.gameUrl = '';
+        session.guestError = error instanceof Error ? error.message : 'Der Gastserver im Browser ist nicht gestartet.';
+        console.warn(`[openscr-mp] ${session.guestError}`);
+        showHost(session);
+        return;
+      }
+      console.warn('[openscr-mp] Dev-Gastserver nicht erreichbar, Server auf dem Handy.');
     }
-    return;
   }
   if (!browserGuestAllowed()) return;
   const content = guestContent(session.appId);
   const listen = guestListenOverride || tcpByteListen;
-  try {
-    const handle = await openGuestServer({
-      token: session.token,
-      appId: session.appId,
-      room: session.roomCode,
-      preferredPort: session.guestPort,
-      listen,
-      read: async (rel) => {
-        const current = guestContent(session.appId) || content;
-        if (!current) return null;
-        return current.read(rel || current.entry);
-      },
-      onLink: (link) => {
-        if (!live || live !== session || session.leaving) {
-          link.close();
-          return;
-        }
-        bindHostLink(session, link);
-      },
-    });
-    session.guestServer = handle;
-    session.guestPort = handle.port;
-    session.guestPhase = 'starting';
-    session.gameUrl = '';
-    showHost(session);
-    if (!session.lanIp || !isPrivateIPv4(session.lanIp)) {
-      session.guestPhase = 'failed';
-      session.guestError = 'Keine private WLAN-Adresse. Der Beitrittscode bleibt leer.';
-      return;
-    }
-    if (!guestListenOverride) await assertGuestServing(handle.port, session.token);
-    session.gameUrl = shareableGameUrl(handle.url(session.lanIp));
-    session.guestPhase = 'ready';
-    session.guestError = '';
-    showHost(session);
-  } catch (error) {
-    session.guestServer?.close();
-    session.guestServer = null;
-    session.gameUrl = '';
-    session.guestPhase = 'failed';
-    session.guestError = error instanceof Error ? error.message : 'Der Gastserver ist nicht gestartet.';
-    console.warn(`[openscr-guest] ${session.guestError}`);
-    showHost(session);
+  if (session.guestPort && session.lanIp && isPrivateIPv4(session.lanIp)) {
+    session.gameUrl = shareableGameUrl(gameUrl(session.lanIp, session.guestPort, session.token));
   }
+  const attempt = async (): Promise<void> => {
+    if (!live || live !== session || session.leaving) return;
+    try {
+      const handle = await openGuestServer({
+        token: session.token,
+        appId: session.appId,
+        room: session.roomCode,
+        preferredPort: session.guestPort,
+        listen,
+        read: async (rel) => {
+          const current = guestContent(session.appId) || content;
+          if (!current) return null;
+          return current.read(rel || current.entry);
+        },
+        onLink: (link) => {
+          if (!live || live !== session || session.leaving) {
+            link.close();
+            return;
+          }
+          bindHostLink(session, link);
+        },
+      });
+      if (!live || live !== session || session.leaving) {
+        handle.close();
+        return;
+      }
+      if (session.guestPort && handle.port !== session.guestPort) {
+        handle.close();
+        throw new Error('Der bisherige Port ist belegt.');
+      }
+      session.guestServer = handle;
+      session.guestPort = handle.port;
+      if (!session.lanIp || !isPrivateIPv4(session.lanIp)) {
+        session.guestPhase = 'failed';
+        session.guestError = 'Keine private WLAN-Adresse. Der Beitrittscode bleibt leer.';
+        showHost(session);
+        return;
+      }
+      session.gameUrl = shareableGameUrl(handle.url(session.lanIp));
+      session.guestPhase = 'ready';
+      session.guestError = '';
+      showHost(session);
+      void remember(session);
+      if (!guestListenOverride) {
+        try {
+          await assertGuestServing(handle.port, session.token);
+        } catch (error) {
+          console.warn('[openscr-guest] Selbsttest', error instanceof Error ? error.message : error);
+        }
+      }
+    } catch (error) {
+      if (!live || live !== session || session.leaving) return;
+      session.guestServer?.close();
+      session.guestServer = null;
+      const message = error instanceof Error ? error.message : 'Der Gastserver ist nicht gestartet.';
+      if (session.guestPort) {
+        session.guestPhase = 'starting';
+        session.guestError = 'Der bisherige Port ist noch belegt. Die Adresse bleibt gleich.';
+        console.warn(`[openscr-guest] ${message}`);
+        showHost(session);
+        setTimeout(() => { void attempt(); }, 1000);
+        return;
+      }
+      session.gameUrl = '';
+      session.guestPhase = 'failed';
+      session.guestError = message;
+      console.warn(`[openscr-guest] ${session.guestError}`);
+      showHost(session);
+    }
+  };
+  await attempt();
 }
 
 function publishPlayers(session: LiveSession): void {
@@ -639,6 +675,7 @@ async function remember(session: LiveSession): Promise<void> {
     snapshot: session.snapshot ?? undefined,
     snapshotSeq: session.snapshotSeq || undefined,
     guestPort: session.guestPort || undefined,
+    lanIp: session.lanIp || undefined,
     updatedAt: Date.now(),
   };
   await activeStore().write(row);
@@ -871,7 +908,7 @@ function bindHostLink(session: LiveSession, link: MpLink): void {
         at,
       );
       if (!admitted.ok) {
-        helloGuard.recordFailure(at);
+        if (admitted.code !== 'busy') helloGuard.recordFailure(at);
         link.send(encodeFrame({ t: 'error', code: admitted.code, message: admitted.message }));
         link.close();
         return;
@@ -974,6 +1011,15 @@ function startHeartbeat(session: LiveSession): void {
   }, MP_LIMITS.heartbeatMs);
 }
 
+function replaySnapshot(session: LiveSession): void {
+  if (session.role !== 'host' || session.snapshot == null) return;
+  session.emit('multiplayer.message', { from: session.selfId, data: session.snapshot });
+  const text = encodeFrame({ t: 'msg', from: session.selfId, data: session.snapshot, seq: session.snapshotSeq || 0 });
+  session.links.forEach((link) => {
+    if (link.browser) link.send(text);
+  });
+}
+
 export async function hostMultiplayer(
   appId: string,
   emit: Emit,
@@ -982,6 +1028,7 @@ export async function hostMultiplayer(
 ): Promise<HostResult> {
   if (live?.appId === appId && live.role === 'host') {
     live.emit = emit;
+    replaySnapshot(live);
     showHost(live);
     return snapshot(live);
   }
@@ -1014,7 +1061,7 @@ export async function hostMultiplayer(
       now: Date.now(),
     });
   const hostMember = room.exportMembers().find((member) => member.host);
-  const ip = await transport.localIpv4();
+  const ip = await transport.localIpv4(restored ? saved.lanIp : undefined);
   let server: MpServer | null = null;
   try {
     server = await transport.listen((link) => {
@@ -1063,6 +1110,7 @@ export async function hostMultiplayer(
   console.log('[openscr-mp] Raum offen', room.roomCode, 'Adresse', ip, 'Port', server?.port);
   emit('multiplayer.players', { players: room.players(), selfId: room.hostId, roomCode: room.roomCode });
   if (restored) {
+    replaySnapshot(live);
     const row = await activeStore().read(appId);
     if (row) emit('multiplayer.resumed', publicResume(row, 'ready'));
   }
@@ -1461,6 +1509,7 @@ export async function resumeMultiplayer(
     live.emit = emit;
     const row = await activeStore().read(appId);
     if (!row) return null;
+    if (live.role === 'host') replaySnapshot(live);
     const view = publicResume(row, live.hostAway ? 'hostAway' : 'ready');
     emit('multiplayer.resumed', view);
     return view;

@@ -107,7 +107,8 @@ export const GUEST_SHELL_SOURCE = String.raw`
         if (navigator.clipboard && text) navigator.clipboard.writeText(text).then(done, done);
       },
       onShare: function () {
-        if (navigator.share && qr.share) navigator.share({ title: info.name || document.title || 'OpenScrapp', url: qr.share }).catch(function () {});
+        var text = qr.share || '';
+        if (navigator.share && text) navigator.share({ title: info.name || document.title || 'OpenScrapp', text: text }).catch(function () {});
       }
     });
     fillHost();
