@@ -7,7 +7,7 @@ import { GithubSession } from '../GithubSession';
 import { addonsAvailable, addonsRequireOwnRepo } from '../iosPolicy';
 import { StorageService } from '../StorageService';
 import { addonFitsScrapp, scrappMatchesTarget } from './manifest';
-import { downloadAddon } from './download';
+import { AddonTokenSource, downloadAddon } from './download';
 import { CachedAddon, injectionForScrapp, ScrappRef, AddonInjection } from './inject';
 import { readAddonGithubToken } from './githubToken';
 
@@ -119,14 +119,20 @@ export async function prepareAddonInjection(platform: string, scrapp: ScrappRef)
 }
 
 async function downloadChecked(platform: string, repoUrl: string, scrapp?: ScrappRef): Promise<CachedAddon> {
-  let token = await readAddonGithubToken();
+  const pat = await readAddonGithubToken();
+  let token = pat;
+  let tokenSource: AddonTokenSource = pat ? 'pat' : 'none';
   if (addonsRequireOwnRepo(platform)) {
     const confirmed = await GithubSession.confirmOwnership(repoUrl);
-    if (!token) token = confirmed.token;
+    if (!token) {
+      token = confirmed.token;
+      tokenSource = 'session';
+    }
   } else if (!token) {
     token = await GithubSession.getToken();
+    tokenSource = token ? 'session' : 'none';
   }
-  const downloaded = await downloadAddon(repoUrl, token);
+  const downloaded = await downloadAddon(repoUrl, token, undefined, tokenSource);
   if (scrapp) addonFitsScrapp(downloaded, scrapp);
   if (addonsRequireOwnRepo(platform)) await assertOwnTargets(downloaded, scrapp);
   return downloaded;
