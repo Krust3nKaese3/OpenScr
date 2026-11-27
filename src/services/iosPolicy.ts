@@ -39,12 +39,17 @@ export function showsLearningChrome(platform: string): boolean {
   return isIosLearningPlatform(platform);
 }
 
-/**
- * Add-ons existieren nur auf Android und in der Web-Entwicklungsumgebung.
- * Auf iOS gibt es keinen Codepfad, der sie anzeigt, lädt oder einsetzt.
- */
+/** Add-ons gibt es auf Android, iOS und in der Web-Entwicklungsumgebung. */
 export function addonsAvailable(platform: string): boolean {
-  return platform === 'android' || platform === 'web';
+  return platform === 'android' || platform === 'ios' || platform === 'web';
+}
+
+/**
+ * Auf iOS gilt dieselbe Besitzregel wie für OpenScrapps: URL-Besitzer und
+ * owner.login müssen das angemeldete Konto sein. Android bleibt offen.
+ */
+export function addonsRequireOwnRepo(platform: string): boolean {
+  return isIosLearningPlatform(platform);
 }
 
 /** Running code uses at most 80% of the available height. The bar keeps the rest. */

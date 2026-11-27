@@ -25,6 +25,30 @@ export interface AddonInjection {
   loaded: { id: string; name: string; version: string; icon: string }[];
 }
 
+/** Lesbarer Quelltext der Add-ons dieser OpenScrapp, nur zur Anzeige. */
+export function addonSourceEntries(
+  addons: readonly CachedAddon[],
+  scrapp: ScrappRef,
+): { path: string; text: string }[] {
+  const out: { path: string; text: string }[] = [];
+  for (const addon of addonsForScrapp(addons, scrapp)) {
+    const manifest = {
+      id: addon.id,
+      name: addon.name,
+      version: addon.version,
+      icon: addon.icon,
+      targetScrapp: addon.targetScrapp,
+      minScrappVersion: addon.minScrappVersion,
+      entry: addon.entry,
+    };
+    out.push({ path: `addon/${addon.id}/addon.json`, text: JSON.stringify(manifest, null, 2) });
+    for (const name of Object.keys(addon.files).sort()) {
+      out.push({ path: `addon/${addon.id}/${name}`, text: addon.files[name] });
+    }
+  }
+  return out;
+}
+
 export function addonsForScrapp(addons: readonly CachedAddon[], scrapp: ScrappRef): CachedAddon[] {
   return addons.filter((addon) => scrappMatchesTarget(addon.targetScrapp, scrapp));
 }

@@ -1,9 +1,12 @@
 /**
- * Zwischenspeicher der Add-ons. Auf iOS macht keine Funktion einen Zugriff.
+ * Zwischenspeicher der Add-ons. Auf iOS läuft vor dem Laden, Aktualisieren und Einsetzen
+ * dieselbe Besitzprüfung wie bei OpenScrapps.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { addonsAvailable } from '../iosPolicy';
-import { addonFitsScrapp } from './manifest';
+import { GithubSession } from '../GithubSession';
+import { addonsAvailable, addonsRequireOwnRepo } from '../iosPolicy';
+import { StorageService } from '../StorageService';
+import { addonFitsScrapp, scrappMatchesTarget } from './manifest';
 import { downloadAddon } from './download';
 import { CachedAddon, injectionForScrapp, ScrappRef, AddonInjection } from './inject';
 import { readAddonGithubToken } from './githubToken';
@@ -31,9 +34,7 @@ export async function listAddons(platform: string): Promise<CachedAddon[]> {
 
 export async function addAddonRepo(platform: string, repoUrl: string, scrapp?: ScrappRef): Promise<CachedAddon> {
   if (!addonsAvailable(platform)) throw new Error('Add-ons gibt es auf diesem Gerät nicht.');
-  const token = await readAddonGithubToken();
-  const downloaded = await downloadAddon(repoUrl, token);
-  if (scrapp) addonFitsScrapp(downloaded, scrapp);
+  const downloaded = await downloadChecked(platform, repoUrl, scrapp);
   const all = await readAll();
   const previous = all.find((item) => item.id === downloaded.id);
   downloaded.enabled = previous ? previous.enabled : true;
@@ -57,9 +58,7 @@ export async function updateAddon(platform: string, id: string, scrapp?: ScrappR
   const all = await readAll();
   const row = all.find((item) => item.id === id);
   if (!row) throw new Error('Add-on ist nicht installiert.');
-  const token = await readAddonGithubToken();
-  const downloaded = await downloadAddon(row.repoUrl, token);
-  if (scrapp) addonFitsScrapp(downloaded, scrapp);
+  const downloaded = await downloadChecked(platform, row.repoUrl, scrapp);
   downloaded.enabled = row.enabled;
   const next = all.map((item) => (item.id === id ? downloaded : item));
   await AsyncStorage.setItem(KEY, JSON.stringify(next));
@@ -74,12 +73,11 @@ export async function removeAddon(platform: string, id: string): Promise<void> {
 
 export async function refreshAddons(platform: string): Promise<void> {
   if (!addonsAvailable(platform)) return;
-  const token = await readAddonGithubToken();
   const all = await readAll();
   const next: CachedAddon[] = [];
   for (const row of all) {
     try {
-      const downloaded = await downloadAddon(row.repoUrl, token);
+      const downloaded = await downloadChecked(platform, row.repoUrl);
       downloaded.enabled = row.enabled;
       next.push(downloaded);
     } catch {
@@ -93,10 +91,61 @@ export async function prepareAddonInjection(platform: string, scrapp: ScrappRef)
   if (!addonsAvailable(platform)) return { script: '', icons: [], errors: [], loaded: [] };
   try {
     const all = await readAll();
-    return injectionForScrapp(all, scrapp);
+    if (!addonsRequireOwnRepo(platform)) return injectionForScrapp(all, scrapp);
+    await GithubSession.confirmOwnership(scrapp.repoUrl);
+    const extra: AddonInjection['errors'] = [];
+    const gated: CachedAddon[] = [];
+    for (const addon of all) {
+      const active = addon.enabled && scrappMatchesTarget(addon.targetScrapp, scrapp);
+      if (!active) {
+        gated.push(addon);
+        continue;
+      }
+      try {
+        await GithubSession.confirmOwnership(addon.repoUrl);
+        gated.push(addon);
+      } catch (failure) {
+        const message = failure instanceof Error ? failure.message : 'Dieses Add-on gehört nicht zum angemeldeten Konto.';
+        extra.push({ id: addon.id, name: addon.name, message });
+        gated.push({ ...addon, enabled: false });
+      }
+    }
+    const built = injectionForScrapp(gated, scrapp);
+    return { ...built, errors: [...extra, ...built.errors] };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Add-ons konnten nicht gelesen werden.';
     return { script: '', icons: [], errors: [{ id: '', name: 'Add-ons', message }], loaded: [] };
+  }
+}
+
+async function downloadChecked(platform: string, repoUrl: string, scrapp?: ScrappRef): Promise<CachedAddon> {
+  let token = await readAddonGithubToken();
+  if (addonsRequireOwnRepo(platform)) {
+    const confirmed = await GithubSession.confirmOwnership(repoUrl);
+    if (!token) token = confirmed.token;
+  }
+  const downloaded = await downloadAddon(repoUrl, token);
+  if (scrapp) addonFitsScrapp(downloaded, scrapp);
+  if (addonsRequireOwnRepo(platform)) await assertOwnTargets(downloaded, scrapp);
+  return downloaded;
+}
+
+async function assertOwnTargets(downloaded: { targetScrapp: string }, explicit?: ScrappRef): Promise<void> {
+  const apps = await StorageService.getApps();
+  const installed: ScrappRef[] = apps.map((app) => ({
+    id: app.id,
+    repoUrl: app.repoUrl,
+    name: app.manifest?.name || '',
+    version: app.manifest?.version || '',
+  }));
+  const candidates = (explicit ? [explicit, ...installed] : installed)
+    .filter((app) => scrappMatchesTarget(downloaded.targetScrapp, app));
+  const unique = candidates.filter((app, index) => candidates.findIndex((other) => other.repoUrl === app.repoUrl) === index);
+  if (!unique.length) {
+    throw new Error('Dieses Add-on zielt auf keine installierte OpenScrapp deines Kontos.');
+  }
+  for (const app of unique) {
+    await GithubSession.confirmOwnership(app.repoUrl);
   }
 }
 

@@ -2,7 +2,7 @@
 
 Ein Add-on ist ein GitHub-Repository mit `addon.json` und JavaScript. OpenScr lädt es in den Entwicklereinstellungen, speichert es auf dem Gerät und setzt es ein, wenn die passende OpenScrapp startet. Das passiert nach dem Code der OpenScrapp. Danach feuert die Seite `openscr:addon`.
 
-Add-ons gibt es auf Android und in der Web-Entwicklungsumgebung. Auf iOS ist `addonsAvailable` in `src/services/iosPolicy.ts` falsch. Dort gibt es keine Oberfläche, keinen Download und kein eingesetztes Skript.
+Add-ons gibt es auf Android, auf iOS und in der Web-Entwicklungsumgebung. Android nimmt jedes GitHub-Repository an und zeigt den Hinweis zur Eigenverantwortung. Auf iOS ist `addonsRequireOwnRepo` wahr: URL-Besitzer und `owner.login` müssen das angemeldete Konto sein, beim Hinzufügen, bei jedem Update und bei jedem Öffnen. Organisationen und fremde Repositories werden abgelehnt, ohne Ausnahme. Das Add-on darf nur eine OpenScrapp treffen, die selbst so installiert ist. Der Quelltext liegt nur lesbar unter „Quelltext“.
 
 ## addon.json
 
@@ -28,7 +28,7 @@ Ein Add-on ist Code zum Lernen und Ausprobieren: eigener Code oder Code von Drit
 
 ## Nutzerfluss
 
-Auf Android und in der Web-Entwicklungsumgebung hat jede OpenScrapp-Karte in der Bibliothek unten rechts eine kleine Add-on-Schaltfläche. Links daneben stehen die Zeichen der eingeschalteten Add-ons für diese OpenScrapp, höchstens drei, danach `+N`.
+Jede OpenScrapp-Karte in der Bibliothek hat unten rechts eine kleine Add-on-Schaltfläche, auch auf iOS. Links daneben stehen die Zeichen der eingeschalteten Add-ons für diese OpenScrapp, höchstens drei, danach `+N`.
 
 Die Schaltfläche öffnet ein Blatt von unten:
 
@@ -36,7 +36,7 @@ Die Schaltfläche öffnet ein Blatt von unten:
 - die Zeile **Privates Repo? Token hinterlegen**. Das Token nutzt dieselbe sichere Ablage wie bisher.
 - die Liste der Add-ons dieser OpenScrapp: Zeichen, Name, Version, Schalter, **Update**, **Entfernen**.
 
-Auf iOS fehlt die Schaltfläche, fehlen die Zeichen, und es gibt keinen Download und kein Einsetzen.
+Auf iOS prüft **Hinzufügen** und **Update** zusätzlich den Besitzer. „Quelltext“ zeigt die Add-on-Dateien unter `addon/` nur zum Lesen. Die Leiste der laufenden OpenScrapp bleibt „Entwicklungsumgebung · eigener Code“.
 
 ## Oberfläche
 
