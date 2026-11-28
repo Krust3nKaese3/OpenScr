@@ -76,7 +76,7 @@ import { nativeDiscoveryPort } from '../services/multiplayer/mdnsPort';
 import { roomStore } from '../services/multiplayer/secureRoomStore';
 import { setHostKeepAlive } from '../services/multiplayer/hostKeepAlive';
 import { setKeepAwake } from '../services/keepAwake';
-import { addPlayer, listPlayers, removePlayer, updatePlayer } from '../services/playerRoster';
+import { addPlayer, listPlayers, removePlayer, setPlayerStats, statsAppFromProfile, updatePlayer } from '../services/playerRoster';
 import {
   addPlayedSong,
   clearPlayedSongs,
@@ -603,6 +603,11 @@ export class NativeCapabilities {
     add: (input: { name?: unknown; tag?: unknown }) => addPlayer(input?.name, input?.tag),
     update: (input: { id?: unknown; name?: unknown; tag?: unknown }) => updatePlayer(input?.id, input?.name, input?.tag),
     remove: (id: string) => removePlayer(id),
+    setStats: (input: unknown) => {
+      const app = statsAppFromProfile(this.songCaller);
+      if (!app) throw new Error('Diese OpenScrapp hat keine Statistik in der Host-Ansicht.');
+      return setPlayerStats(app, input);
+    },
   };
 
   screen = {

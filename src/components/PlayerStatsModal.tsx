@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { formatPlayer, listPlayers, type PlayerRecord } from '../services/playerRoster';
+import { formatPlayer, listPlayers, readStat, type PlayerRecord } from '../services/playerRoster';
 import { useContainerTheme } from '../theme/containerTheme';
 
 type AppId = 'werwolf' | 'songraten';
@@ -25,15 +25,11 @@ const ROLES: { id: RoleId; label: string }[] = [
 ];
 
 function werwolfColumns(role: RoleId | null): Column[] {
-  const read = (row: PlayerRecord, field: 'games' | 'wins' | 'deaths') => {
-    if (!role) return row.werwolf?.[field] ?? 0;
-    return row.werwolf?.roles[role]?.[field] ?? 0;
-  };
   return [
     { key: 'name', label: 'Name', value: (row) => formatPlayer(row) },
-    { key: 'games', label: 'Spiele', value: (row) => read(row, 'games') },
-    { key: 'wins', label: 'Siege', value: (row) => read(row, 'wins') },
-    { key: 'deaths', label: 'Tode', value: (row) => read(row, 'deaths') },
+    { key: 'games', label: 'Spiele', value: (row) => readStat(row, 'werwolf', 'games', role) },
+    { key: 'wins', label: 'Siege', value: (row) => readStat(row, 'werwolf', 'wins', role) },
+    { key: 'deaths', label: 'Tode', value: (row) => readStat(row, 'werwolf', 'deaths', role) },
   ];
 }
 
@@ -41,11 +37,11 @@ const COLUMNS: Record<AppId, Column[]> = {
   werwolf: werwolfColumns(null),
   songraten: [
     { key: 'name', label: 'Name', value: (row) => formatPlayer(row) },
-    { key: 'games', label: 'Spiele', value: (row) => row.songraten?.games ?? 0 },
-    { key: 'wins', label: 'Siege', value: (row) => row.songraten?.wins ?? 0 },
-    { key: 'points', label: 'Punkte', value: (row) => row.songraten?.points ?? 0 },
-    { key: 'dj', label: 'Als DJ', value: (row) => row.songraten?.djSongs ?? 0 },
-    { key: 'guessed', label: 'Erraten', value: (row) => row.songraten?.guessed ?? 0 },
+    { key: 'games', label: 'Spiele', value: (row) => readStat(row, 'songraten', 'games') },
+    { key: 'wins', label: 'Siege', value: (row) => readStat(row, 'songraten', 'wins') },
+    { key: 'points', label: 'Punkte', value: (row) => readStat(row, 'songraten', 'points') },
+    { key: 'dj', label: 'Als DJ', value: (row) => readStat(row, 'songraten', 'djSongs') },
+    { key: 'guessed', label: 'Erraten', value: (row) => readStat(row, 'songraten', 'guessed') },
   ],
 };
 

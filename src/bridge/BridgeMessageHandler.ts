@@ -184,6 +184,7 @@ export class BridgeMessageHandler {
             add: (input) => sendMessage('players.add', [input || {}]),
             update: (input) => sendMessage('players.update', [input || {}]),
             remove: (id) => sendMessage('players.remove', [id]),
+            setStats: (input) => sendMessage('players.setStats', [input || {}]),
           },
           secrets: {
             get: (key) => sendMessage('secrets.get', [key]),
