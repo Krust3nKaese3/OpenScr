@@ -488,6 +488,7 @@ const BRIDGE_METHODS: Record<string, MethodSpec> = {
   'players.add': method({ category: 'players', action: 'add', validate: (a) => (exact(a, 1, 1), [plainObject(a[0], 'Spieler', 500)]) }),
   'players.update': method({ category: 'players', action: 'update', validate: (a) => (exact(a, 1, 1), [plainObject(a[0], 'Spieler', 500)]) }),
   'players.remove': method({ category: 'players', action: 'remove', validate: (a) => (exact(a, 1, 1), [str(a[0], 'Spieler', 40)]) }),
+  'players.setStats': method({ category: 'players', action: 'setStats', validate: (a) => (exact(a, 1, 1), [plainObject(a[0], 'Statistik', 64_000)]) }),
 
   'screen.keepAwake': method({
     category: 'screen',
