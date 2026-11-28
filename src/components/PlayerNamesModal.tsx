@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { AppTextInput, KeyboardSafeView, KeyboardScrollView } from './KeyboardAware';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { notify } from '../services/notify';
 import { addPlayer, formatPlayer, listPlayers, removePlayer, type PlayerRecord } from '../services/playerRoster';
@@ -36,14 +37,14 @@ export function PlayerNamesModal({ visible, onClose }: { visible: boolean; onClo
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.overlay}>
+      <KeyboardSafeView style={styles.overlay}>
         <View style={[styles.card, { backgroundColor: tokens.card }]}>
           <Text style={[styles.title, { color: tokens.text }]}>Spielernamen</Text>
           <Text style={[styles.hint, { color: tokens.muted }]}>
             Ein Name gilt für alle OpenScrapps auf diesem Gerät. Er besteht aus Anzeigename und Tag, zum Beispiel Mina#7K2.
           </Text>
           <View style={styles.form}>
-            <TextInput
+            <AppTextInput
               value={name}
               onChangeText={setName}
               placeholder="Anzeigename"
@@ -52,7 +53,7 @@ export function PlayerNamesModal({ visible, onClose }: { visible: boolean; onClo
               autoCorrect={false}
               style={[styles.input, { color: tokens.text, borderColor: tokens.line, backgroundColor: tokens.bg }]}
             />
-            <TextInput
+            <AppTextInput
               value={tag}
               onChangeText={setTag}
               placeholder="Tag"
@@ -65,7 +66,7 @@ export function PlayerNamesModal({ visible, onClose }: { visible: boolean; onClo
           <TouchableOpacity style={[styles.add, { backgroundColor: tokens.lime }]} onPress={() => { void save(); }} disabled={busy} accessibilityLabel="Hinzufügen">
             {busy ? <ActivityIndicator color={tokens.ink} /> : <Ionicons name="add" size={26} color={tokens.ink} />}
           </TouchableOpacity>
-          <ScrollView style={styles.list} nativeID="openscr-names-scroll">
+          <KeyboardScrollView style={styles.list} nativeID="openscr-names-scroll">
             {rows.length === 0 ? <Text style={[styles.hint, { color: tokens.muted }]}>Noch keine Namen.</Text> : rows.map((row) => (
               <View key={row.id} style={styles.row}>
                 <Text style={[styles.player, { color: tokens.text }]}>{formatPlayer(row)}</Text>
@@ -74,19 +75,19 @@ export function PlayerNamesModal({ visible, onClose }: { visible: boolean; onClo
                 </TouchableOpacity>
               </View>
             ))}
-          </ScrollView>
+          </KeyboardScrollView>
           <TouchableOpacity onPress={onClose} accessibilityLabel="Schließen" style={styles.close}>
             <Ionicons name="close" size={26} color={tokens.lime} />
           </TouchableOpacity>
         </View>
-      </View>
+      </KeyboardSafeView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', padding: 20 },
-  card: { borderRadius: 18, padding: 16, maxHeight: '80%' },
+  card: { borderRadius: 18, padding: 16, maxHeight: '80%', flexShrink: 1 },
   title: { fontSize: 20, fontWeight: '700' },
   hint: { fontSize: 14, lineHeight: 20, marginTop: 8 },
   form: { flexDirection: 'row', gap: 8, marginTop: 12 },

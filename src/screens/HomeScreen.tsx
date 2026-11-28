@@ -4,7 +4,6 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  TextInput,
   Modal,
   ScrollView,
   type ScrollViewInstance,
@@ -28,6 +27,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { bundledBlocklistFile, bundledCatalogFile, loadPolicyLists } from '../services/remoteLists';
 import { devFolderFor, devFoldersEnabled, setDevFolder } from '../services/devFolder';
 import { PlayerNamesModal } from '../components/PlayerNamesModal';
+import { AppTextInput, KeyboardSafeView, KeyboardScrollView, useKeyboardVisible } from '../components/KeyboardAware';
 import { PlayerStatsModal } from '../components/PlayerStatsModal';
 
 const SONG_DEV_FOLDER = 'E:\\git_projects\\mobile_apps\\GuessTheSongScrapp';
@@ -124,6 +124,7 @@ export const HomeScreen: React.FC = () => {
   const [revealId, setRevealId] = useState<string | null>(null);
   const [tileTick, setTileTick] = useState(0);
   const homeScrollRef = useRef<ScrollViewInstance>(null);
+  const keyboardVisible = useKeyboardVisible();
   const tileY = useRef<Record<string, number>>({});
   const bounce = useRef(new Animated.Value(1)).current;
   const [selectedApp, setSelectedApp] = useState<MiniApp | null>(null);
@@ -701,7 +702,7 @@ export const HomeScreen: React.FC = () => {
       {selectedApp ? (
         <MiniAppRunner key={selectedApp.id} app={selectedApp} onClose={closeSelectedApp} onLeave={(next) => { setScanning(false); setTab(next); closeSelectedApp(); }} />
       ) : (
-        <>
+        <KeyboardSafeView style={styles.container}>
           <View style={styles.header}>
             {wordmark(tab !== 'add')}
           </View>
@@ -719,7 +720,7 @@ export const HomeScreen: React.FC = () => {
           ) : null}
 
           {tab === 'add' ? (
-            <ScrollView contentContainerStyle={styles.addScroll} keyboardShouldPersistTaps="handled">
+            <KeyboardScrollView contentContainerStyle={styles.addScroll}>
               <Text style={[styles.screenTitle, { color: tokens.text }]}>Scrapp hinzufügen</Text>
               {canTypeRepo ? (
                 <>
@@ -761,7 +762,7 @@ export const HomeScreen: React.FC = () => {
                   </View>
                   <View style={[styles.field, { backgroundColor: tokens.input, borderColor: tokens.line }]}>
                     <Text style={[styles.fieldMark, { color: tokens.text }]}>⌘</Text>
-                    <TextInput
+                    <AppTextInput
                       style={[styles.fieldInput, { color: tokens.text }]}
                       placeholder="github.com/nutzer/repo"
                       placeholderTextColor={tokens.muted}
@@ -798,7 +799,7 @@ export const HomeScreen: React.FC = () => {
                 </View>
               )}
               {catalogBlock}
-            </ScrollView>
+            </KeyboardScrollView>
           ) : null}
 
           {tab === 'settings' ? (
@@ -847,7 +848,7 @@ export const HomeScreen: React.FC = () => {
             </ScrollView>
           ) : null}
 
-          <View style={styles.navWrap} pointerEvents="box-none">
+          {keyboardVisible ? null : <View style={styles.navWrap} pointerEvents="box-none">
             <View style={[styles.navPill, { backgroundColor: tokens.nav, borderColor: tokens.line }]}>
               {([
                 ['home', 'Start'],
@@ -864,7 +865,7 @@ export const HomeScreen: React.FC = () => {
                 );
               })}
             </View>
-          </View>
+          </View>}
 
           {Platform.OS !== 'ios' ? (
           <SpotifySettingsModal visible={showSpotifySettings} onClose={() => setShowSpotifySettings(false)} />
@@ -898,10 +899,10 @@ export const HomeScreen: React.FC = () => {
           </Modal>
 
           <Modal visible={showFolderModal} transparent animationType="slide">
-            <View style={styles.modalOverlay}>
+            <KeyboardSafeView style={styles.modalOverlay}>
               <View style={[styles.modalContainer, { backgroundColor: tokens.card }]}>
                 <Text style={[styles.modalTitle, { color: tokens.text }]}>Neuer Ordner</Text>
-                <TextInput
+                <AppTextInput
                   style={[styles.modalInput, { color: tokens.text, borderColor: tokens.line, backgroundColor: tokens.bg }]}
                   placeholder="Ordnername"
                   placeholderTextColor={tokens.muted}
@@ -926,9 +927,9 @@ export const HomeScreen: React.FC = () => {
                   </TouchableOpacity>
                 </View>
               </View>
-            </View>
+            </KeyboardSafeView>
           </Modal>
-        </>
+        </KeyboardSafeView>
       )}
 
       <AppInfoModal
@@ -969,15 +970,15 @@ export const HomeScreen: React.FC = () => {
       <SourceCodeModal app={sourceApp} visible={!!sourceApp} onClose={() => setSourceApp(null)} />
 
       <Modal visible={!!actionApp} transparent animationType="fade" onRequestClose={() => setActionApp(null)}>
-        <View style={styles.modalOverlay}>
+        <KeyboardSafeView style={styles.modalOverlay}>
           <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setActionApp(null)} />
-          <View style={[styles.sheet, { backgroundColor: tokens.card, zIndex: 1 }]}>
+          <KeyboardScrollView style={[styles.sheetScroll, { backgroundColor: tokens.card }]} contentContainerStyle={styles.sheet}>
             <Text style={[styles.modalTitle, { color: tokens.text }]}>{actionApp?.manifest.name}</Text>
             <Text selectable style={[styles.sheetUrl, { color: tokens.muted, backgroundColor: tokens.bg }]}>{actionApp?.repoUrl}</Text>
             {devFoldersEnabled() && actionApp ? (
               <View style={styles.devFolder}>
                 <Text style={[styles.tileMeta, { color: tokens.muted }]}>Lokaler Ordner</Text>
-                <TextInput
+                <AppTextInput
                   value={folderDraft}
                   onChangeText={setFolderDraft}
                   autoCapitalize="none"
@@ -1019,8 +1020,8 @@ export const HomeScreen: React.FC = () => {
                 <Text style={{ fontSize: 16, color: b.danger ? tokens.danger : tokens.text }}>{b.label}</Text>
               </TouchableOpacity>
             ))}
-          </View>
-        </View>
+          </KeyboardScrollView>
+        </KeyboardSafeView>
       </Modal>
     </View>
   );
@@ -1106,7 +1107,8 @@ const styles = StyleSheet.create({
   modalButtonCancel: { borderRadius: 12, paddingVertical: 12, paddingHorizontal: 12, marginTop: 8 },
   modalButtonCreate: { borderRadius: 12, paddingVertical: 12, paddingHorizontal: 12, marginTop: 8 },
   modalButtonText: { textAlign: 'center', fontSize: 15, fontWeight: '700' },
-  sheet: { borderRadius: 18, padding: 18, width: '88%' },
+  sheetScroll: { flexGrow: 0, flexShrink: 1, width: '88%', borderRadius: 18, zIndex: 1 },
+  sheet: { borderRadius: 18, padding: 18 },
   sheetUrl: { fontSize: 13, padding: 8, borderRadius: 8, marginBottom: 8 },
   sheetRow: { paddingVertical: 12 },
 });

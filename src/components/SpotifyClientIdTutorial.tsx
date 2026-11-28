@@ -8,7 +8,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -27,11 +26,17 @@ import {
   SpotifyClientIdInfo,
 } from '../services/spotifyClientId';
 import { getSpotifyClientId, setSpotifySettingsClientId } from '../services/spotifySettings';
+import { AppTextInput, KeyboardSafeView, KeyboardScrollView } from './KeyboardAware';
+
+/** How long the success checkmark stays visible before the Spotify window closes. */
+export const SAVE_SUCCESS_CLOSE_MS = 1200;
 
 interface Props {
   visible: boolean;
   onClose: () => void;
   onSaved?: (info: SpotifyClientIdInfo) => void;
+  /** Called ~1.2 s after a successful save, so the checkmark is visible first. */
+  onSavedDone?: () => void;
 }
 
 const DASHBOARD_SHOT = require('../../assets/spotify-tutorial/android-packages-sha1.png');
@@ -40,7 +45,7 @@ const DASHBOARD_SHOT = require('../../assets/spotify-tutorial/android-packages-s
 const SHOT_WIDTH = 920;
 const SHOT_HEIGHT = Math.round(SHOT_WIDTH * (494 / 1866));
 
-export const SpotifyClientIdTutorial: React.FC<Props> = ({ visible, onClose, onSaved }) => {
+export const SpotifyClientIdTutorial: React.FC<Props> = ({ visible, onClose, onSaved, onSavedDone }) => {
   const sheetHeight = Math.round(Dimensions.get('window').height * 0.92);
   const target = useMemo(() => spotifyAndroidDashboardTarget(readRunningAndroidPackage()), []);
   const dev = useMemo(() => spotifyAndroidDashboardTarget(DEVELOPMENT_ANDROID_PACKAGE), []);
@@ -48,7 +53,7 @@ export const SpotifyClientIdTutorial: React.FC<Props> = ({ visible, onClose, onS
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.overlay}>
+      <KeyboardSafeView style={styles.overlay}>
         <View style={[styles.sheet, { maxHeight: sheetHeight }]}>
           <View style={styles.header}>
             <Text style={styles.title}>Anleitung</Text>
@@ -56,10 +61,9 @@ export const SpotifyClientIdTutorial: React.FC<Props> = ({ visible, onClose, onS
               <Text style={styles.closeText}>Schließen</Text>
             </TouchableOpacity>
           </View>
-          <ScrollView
+          <KeyboardScrollView
             style={{ maxHeight: sheetHeight - 52 }}
             contentContainerStyle={styles.content}
-            keyboardShouldPersistTaps="handled"
             nestedScrollEnabled
           >
             <Text style={styles.lead}>
@@ -136,7 +140,7 @@ export const SpotifyClientIdTutorial: React.FC<Props> = ({ visible, onClose, onS
                 Nach dem Anlegen die Client ID kopieren. Das sind 32 Hex-Zeichen.
                 Hier einfügen und auf Speichern tippen. Dieselbe ID gilt in den Spotify-Einstellungen.
               </Text>
-              <GuideClientIdField visible={visible} onSaved={onSaved} />
+              <GuideClientIdField visible={visible} onSaved={onSaved} onDone={onSavedDone} />
             </Step>
 
             <Step n={9} title="Spotify-App und Premium">
@@ -145,9 +149,9 @@ export const SpotifyClientIdTutorial: React.FC<Props> = ({ visible, onClose, onS
                 API und SDK kosten nichts extra. Premium brauchst du, um einen bestimmten Track zu starten.
               </Text>
             </Step>
-          </ScrollView>
+          </KeyboardScrollView>
         </View>
-      </View>
+      </KeyboardSafeView>
     </Modal>
   );
 };
@@ -219,10 +223,15 @@ function ProductionFingerprints({ packageName }: { packageName: string }) {
   );
 }
 
-function GuideClientIdField({ visible, onSaved }: { visible: boolean; onSaved?: (info: SpotifyClientIdInfo) => void }) {
+function GuideClientIdField({ visible, onSaved, onDone }: { visible: boolean; onSaved?: (info: SpotifyClientIdInfo) => void; onDone?: () => void }) {
   const [value, setValue] = useState('');
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+  }, []);
 
   useEffect(() => {
     if (!visible) return undefined;
@@ -240,6 +249,8 @@ function GuideClientIdField({ visible, onSaved }: { visible: boolean; onSaved?: 
       setValue(info.settingsClientId ?? '');
       setSaved(true);
       onSaved?.(info);
+      if (closeTimer.current) clearTimeout(closeTimer.current);
+      closeTimer.current = setTimeout(() => { closeTimer.current = null; setSaved(false); onDone?.(); }, SAVE_SUCCESS_CLOSE_MS);
       if (info.needsBuild) {
         Alert.alert('Spotify', 'Client ID im Container gespeichert. Login und Wiedergabe brauchen den Build mit dem Spotify-Modul.');
       }
@@ -253,10 +264,14 @@ function GuideClientIdField({ visible, onSaved }: { visible: boolean; onSaved?: 
 
   return (
     <View>
-      <TextInput
+      <AppTextInput
         style={styles.input}
         value={value}
-        onChangeText={(next) => { setSaved(false); setValue(next); }}
+        onChangeText={(next) => {
+          if (closeTimer.current) { clearTimeout(closeTimer.current); closeTimer.current = null; }
+          setSaved(false);
+          setValue(next);
+        }}
         autoCapitalize="none"
         autoCorrect={false}
         spellCheck={false}
@@ -264,6 +279,7 @@ function GuideClientIdField({ visible, onSaved }: { visible: boolean; onSaved?: 
         editable={!busy}
         accessibilityLabel="Spotify Client ID"
       />
+      <View style={styles.saveRow}>
       <TouchableOpacity
         onPress={() => { void save(); }}
         disabled={busy}
@@ -273,7 +289,13 @@ function GuideClientIdField({ visible, onSaved }: { visible: boolean; onSaved?: 
       >
         <Text style={styles.copyBtnText}>{busy ? 'Speichert …' : 'Speichern'}</Text>
       </TouchableOpacity>
-      {saved ? <Text style={styles.savedText}>Gespeichert</Text> : null}
+        {saved ? (
+          <View style={styles.checkCircle} accessibilityLabel="Gespeichert" accessibilityLiveRegion="polite">
+            <Text style={styles.checkMark}>✓</Text>
+          </View>
+        ) : null}
+        {saved ? <Text style={styles.savedText}>Gespeichert</Text> : null}
+      </View>
     </View>
   );
 }
@@ -349,7 +371,7 @@ function CopyValue({ label, value }: { label: string; value: string }) {
 
 const styles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  sheet: { backgroundColor: 'white', borderTopLeftRadius: 16, borderTopRightRadius: 16, width: '100%' },
+  sheet: { backgroundColor: 'white', borderTopLeftRadius: 16, borderTopRightRadius: 16, width: '100%', flexShrink: 1 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -384,6 +406,9 @@ const styles = StyleSheet.create({
   copyBtn: { alignSelf: 'flex-start', marginTop: 8, marginRight: 8, backgroundColor: '#1DB954', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
   copyBtnText: { color: 'white', fontWeight: '700', fontSize: 13 },
   input: { marginTop: 8, borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 12, fontFamily: 'monospace', color: '#111', backgroundColor: 'white' },
-  saveBtn: { alignSelf: 'flex-start', marginTop: 8, backgroundColor: '#1DB954', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 },
-  savedText: { marginTop: 6, fontSize: 13, fontWeight: '700', color: '#0b7a32' },
+  saveRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', marginTop: 8, gap: 10 },
+  checkCircle: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#1DB954', alignItems: 'center', justifyContent: 'center' },
+  checkMark: { color: 'white', fontWeight: '800', fontSize: 17, lineHeight: 20 },
+  saveBtn: { alignSelf: 'flex-start', backgroundColor: '#1DB954', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 },
+  savedText: { fontSize: 13, fontWeight: '700', color: '#0b7a32' },
 });

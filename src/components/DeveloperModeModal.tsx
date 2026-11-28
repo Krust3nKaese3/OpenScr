@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, Modal, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator, Alert, Linking, ScrollView, Platform } from 'react-native';
+import { View, Text, Modal, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, Linking, Platform } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { GithubSession } from '../services/GithubSession';
 import { githubOAuthClientId } from '../services/developerMode';
 import { addonsAvailable } from '../services/iosPolicy';
 import { AddonSettings } from './AddonSettings';
+import { AppTextInput, KeyboardSafeView, KeyboardScrollView } from './KeyboardAware';
 
 const TOKEN_INFO =
   'Ein persönliches Token ist ein langes Passwort, das du selbst auf GitHub erzeugst. Du brauchst es nur, wenn die Anmeldung mit Code nicht klappt. Erzeugen: GitHub → Settings → Developer settings → Personal access tokens → Fine-grained token, nur Lesezugriff auf deine Repositories (Contents: Read-only). Das Token bleibt nur auf diesem Gerät gespeichert.';
@@ -133,9 +134,9 @@ export const DeveloperModeModal: React.FC<DeveloperModeModalProps> = ({ visible,
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.overlay}>
+      <KeyboardSafeView style={styles.overlay}>
         <View style={styles.card}>
-          <ScrollView>
+          <KeyboardScrollView>
             <Text style={styles.title}>{ownReposOnly ? 'GitHub-Anmeldung' : 'Entwicklermodus'}</Text>
             <Text style={styles.body}>
               {ownReposOnly
@@ -183,7 +184,7 @@ export const DeveloperModeModal: React.FC<DeveloperModeModalProps> = ({ visible,
                 <Text style={styles.infoButton}>ⓘ</Text>
               </TouchableOpacity>
             </View>
-            <TextInput
+            <AppTextInput
               style={styles.input}
               value={tokenDraft}
               onChangeText={setTokenDraft}
@@ -203,19 +204,19 @@ export const DeveloperModeModal: React.FC<DeveloperModeModalProps> = ({ visible,
             {status ? <Text style={styles.hint}>{status}</Text> : null}
             {addonsAvailable(Platform.OS) ? <AddonSettings platform={Platform.OS} /> : null}
             {busy ? <ActivityIndicator style={{ marginTop: 12 }} /> : null}
-          </ScrollView>
+          </KeyboardScrollView>
           <TouchableOpacity style={styles.secondary} onPress={onClose}>
             <Text style={styles.secondaryText}>Schließen</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </KeyboardSafeView>
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 16 },
-  card: { backgroundColor: 'white', borderRadius: 12, maxHeight: '90%', padding: 16 },
+  card: { backgroundColor: 'white', borderRadius: 12, maxHeight: '90%', padding: 16, flexShrink: 1 },
   title: { fontSize: 20, fontWeight: '700', marginBottom: 8 },
   body: { fontSize: 14, color: '#333', marginBottom: 12 },
   row: { flexDirection: 'row', marginBottom: 12 },
