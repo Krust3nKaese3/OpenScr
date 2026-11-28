@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { ADDON_NOTICE, addAddonRepo, listAddons, readAddonNoticeAck, removeAddon, setAddonEnabled, writeAddonNoticeAck } from '../services/addons/store';
 import { addonTokenStoreAvailable, clearAddonGithubToken, readAddonGithubToken, writeAddonGithubToken } from '../services/addons/githubToken';
 import { CachedAddon } from '../services/addons/inject';
+import { AppTextInput } from './KeyboardAware';
 
 /** Sichtbar nur, wenn der Aufrufer die Plattform schon geprüft hat. */
 export const AddonSettings: React.FC<{ platform: string }> = ({ platform }) => {
@@ -66,7 +67,7 @@ export const AddonSettings: React.FC<{ platform: string }> = ({ platform }) => {
       <Text style={styles.body}>
         Auf der Karte einer OpenScrapp öffnet das Add-on-Symbol dasselbe für genau diese OpenScrapp: Link, Schalter, Update und Entfernen. Auf iOS gibt es diese Funktion nicht.
       </Text>
-      <TextInput
+      <AppTextInput
         style={styles.input}
         value={repo}
         onChangeText={setRepo}
@@ -80,7 +81,7 @@ export const AddonSettings: React.FC<{ platform: string }> = ({ platform }) => {
       {addonTokenStoreAvailable() ? (
         <>
           <Text style={styles.label}>{hasToken ? 'Token für private Repositories ist gespeichert' : 'Optionales Token für private Repositories'}</Text>
-          <TextInput
+          <AppTextInput
             style={styles.input}
             value={token}
             onChangeText={setToken}

@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { spotifyClientIdSourceLabel, spotifyRedirectUri } from '../services/spotifyClientId';
 import { getSpotifyClientId, setSpotifySettingsClientId } from '../services/spotifySettings';
-import { SpotifyClientIdTutorial } from './SpotifyClientIdTutorial';
+import { SAVE_SUCCESS_CLOSE_MS, SpotifyClientIdTutorial } from './SpotifyClientIdTutorial';
+import { AppTextInput, KeyboardSafeView, KeyboardScrollView } from './KeyboardAware';
 
 interface Props {
   visible: boolean;
@@ -15,9 +16,18 @@ export const SpotifySettingsModal: React.FC<Props> = ({ visible, onClose }) => {
   const [active, setActive] = useState('wird geladen …');
   const [busy, setBusy] = useState(false);
   const [tutorial, setTutorial] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+  }, []);
 
   useEffect(() => {
-    if (!visible) setTutorial(false);
+    if (!visible) {
+      setTutorial(false);
+      setSaved(false);
+    }
   }, [visible]);
 
   useEffect(() => {
@@ -44,6 +54,12 @@ export const SpotifySettingsModal: React.FC<Props> = ({ visible, onClose }) => {
       setValue(info.settingsClientId ?? '');
       const shown = info.clientId ? `${info.clientId} (${spotifyClientIdSourceLabel(info.source)})` : 'keine';
       setActive(shown);
+      if (next.trim()) {
+        // Show the checkmark first, then close the Spotify window.
+        setSaved(true);
+        if (closeTimer.current) clearTimeout(closeTimer.current);
+        closeTimer.current = setTimeout(() => { closeTimer.current = null; setSaved(false); setTutorial(false); onClose(); }, SAVE_SUCCESS_CLOSE_MS);
+      }
       if (info.needsBuild) {
         Alert.alert('Spotify', 'Client ID im Container gespeichert. Login und Wiedergabe brauchen den Build mit dem Spotify-Modul.');
       }
@@ -57,8 +73,8 @@ export const SpotifySettingsModal: React.FC<Props> = ({ visible, onClose }) => {
   return (
     <>
       <Modal visible={visible} transparent animationType="slide" onRequestClose={tutorial ? () => setTutorial(false) : onClose}>
-        <View style={styles.overlay}>
-          <View style={styles.card}>
+        <KeyboardSafeView style={styles.overlay}>
+          <KeyboardScrollView style={styles.cardScroll} contentContainerStyle={styles.card}>
             <Text style={styles.title}>Spotify</Text>
             <Text style={styles.body}>
               Client ID aus dem Spotify Developer Dashboard. Leer lassen ist normal, bis du eine App angelegt hast.
@@ -75,10 +91,14 @@ export const SpotifySettingsModal: React.FC<Props> = ({ visible, onClose }) => {
                 <Text style={styles.helpText}>Anleitung</Text>
               </TouchableOpacity>
             </View>
-            <TextInput
+            <AppTextInput
               style={styles.input}
               value={value}
-              onChangeText={setValue}
+              onChangeText={(next) => {
+                if (closeTimer.current) { clearTimeout(closeTimer.current); closeTimer.current = null; }
+                setSaved(false);
+                setValue(next);
+              }}
               autoCapitalize="none"
               autoCorrect={false}
               spellCheck={false}
@@ -93,18 +113,19 @@ export const SpotifySettingsModal: React.FC<Props> = ({ visible, onClose }) => {
                 <Text style={styles.secondaryText}>Leeren</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.primary} onPress={() => save(value)} disabled={busy}>
-                <Text style={styles.primaryText}>Speichern</Text>
+                <Text style={styles.primaryText}>{saved ? '✓ Gespeichert' : 'Speichern'}</Text>
               </TouchableOpacity>
             </View>
             <TouchableOpacity style={styles.close} onPress={onClose}>
               <Text style={styles.secondaryText}>Schließen</Text>
             </TouchableOpacity>
-          </View>
-        </View>
+          </KeyboardScrollView>
+        </KeyboardSafeView>
       </Modal>
       <SpotifyClientIdTutorial
         visible={visible && tutorial}
         onClose={() => setTutorial(false)}
+        onSavedDone={() => { setTutorial(false); onClose(); }}
         onSaved={(info) => {
           setValue(info.settingsClientId ?? '');
           const shown = info.clientId ? `${info.clientId} (${spotifyClientIdSourceLabel(info.source)})` : 'keine';
@@ -117,7 +138,8 @@ export const SpotifySettingsModal: React.FC<Props> = ({ visible, onClose }) => {
 
 const styles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
-  card: { backgroundColor: 'white', borderRadius: 12, padding: 20, width: '90%' },
+  cardScroll: { flexGrow: 0, flexShrink: 1, width: '90%', backgroundColor: 'white', borderRadius: 12 },
+  card: { padding: 20 },
   title: { fontSize: 20, fontWeight: '700', marginBottom: 8 },
   body: { fontSize: 13, color: '#333', marginBottom: 12 },
   labelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, gap: 8 },

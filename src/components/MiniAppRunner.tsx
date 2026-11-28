@@ -31,6 +31,8 @@ import { setGuestContent } from '../services/multiplayer/guestContent';
 import { setGuestShellMeta } from '../services/multiplayer/guestHttp';
 import { applyShowOverLock, publishOverLockNotice, readShowOverLockMap, shouldShowOverLock, showOverLockEnabled, SHOW_OVER_LOCK_KEY } from '../services/showOverLock';
 import { stableWebViewHtml } from '../services/webViewSource';
+import { MINI_APP_KEYBOARD_SOURCE } from '../services/miniAppKeyboard';
+import { KeyboardSafeView, useKeyboardVisible } from './KeyboardAware';
 import { spotifyReconnectQuiet } from '../services/spotifySettings';
 import { shouldResumeSpotifyRemote } from '../services/spotifyClientId';
 import {
@@ -54,6 +56,7 @@ interface MiniAppRunnerProps {
 
 const MiniAppRunnerBase: React.FC<MiniAppRunnerProps> = ({ app, onClose, onLeave }) => {
   const tokens = useContainerTheme();
+  const keyboardVisible = useKeyboardVisible();
   const [shellPage, setShellPage] = useState<'index' | 'qr' | 'options'>('index');
   const webViewRef = useRef<{ injectJavaScript: (js: string) => void } | null>(null);
   const frameRef = useRef<HTMLIFrameElement | null>(null);
@@ -375,6 +378,7 @@ const MiniAppRunnerBase: React.FC<MiniAppRunnerProps> = ({ app, onClose, onLeave
           <script>${webBridge}${ROSTER_LOBBY_SOURCE}${QR_SHELL_SOURCE}${bridgeScript}
           ${assetRuntimeSource(host)}
           ${hashLine}</script>
+          <script>${MINI_APP_KEYBOARD_SOURCE}</script>
           ${rewritten}
           ${addonScript}
         </body>
@@ -551,7 +555,7 @@ const MiniAppRunnerBase: React.FC<MiniAppRunnerProps> = ({ app, onClose, onLeave
 
   const codePane = learning ? { height: panes.code, maxHeight: '80%' as const } : { flex: 1 };
   return (
-    <View style={styles.container}>
+    <KeyboardSafeView style={styles.container}>
       <StatusBar hidden={!learning} />
       {learning ? (
         <View style={[styles.devBar, { height: panes.bar }]}>
@@ -566,7 +570,7 @@ const MiniAppRunnerBase: React.FC<MiniAppRunnerProps> = ({ app, onClose, onLeave
           </View>
         </View>
       ) : null}
-      <View style={[codePane, learning ? null : styles.scrappStage]}>
+      <View style={[codePane, learning ? null : styles.scrappStage, !learning && keyboardVisible ? styles.scrappStageKeyboard : null]}>
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#2196F3" />
@@ -616,7 +620,7 @@ const MiniAppRunnerBase: React.FC<MiniAppRunnerProps> = ({ app, onClose, onLeave
         />
       )}
 
-      {learning ? null : (
+      {learning || keyboardVisible ? null : (
         <View style={styles.navWrap} pointerEvents="box-none">
           <View style={styles.navRow}>
             <View style={[styles.navPill, { backgroundColor: tokens.nav, borderColor: tokens.line }]}>
@@ -646,7 +650,7 @@ const MiniAppRunnerBase: React.FC<MiniAppRunnerProps> = ({ app, onClose, onLeave
           </View>
         </View>
       )}
-      {addonIcons.length ? (
+      {addonIcons.length && !keyboardVisible ? (
         <View style={styles.addonBar} pointerEvents="none">
           {addonIcons.map((item) => (
             <Text key={item.id} style={styles.addonIcon} accessibilityLabel={item.name}>{item.icon}</Text>
@@ -661,7 +665,7 @@ const MiniAppRunnerBase: React.FC<MiniAppRunnerProps> = ({ app, onClose, onLeave
           </TouchableOpacity>
         </View>
       ) : null}
-      {Platform.OS === 'android' && hostPresence && !mpUi ? (
+      {Platform.OS === 'android' && hostPresence && !mpUi && !keyboardVisible ? (
         <TouchableOpacity
           onPress={() => { try { showMultiplayerQr(app.id); } catch { /* Der Raum ist schon zu. */ } }}
           style={{ position: 'absolute', left: 12, bottom: 16, borderRadius: 16, backgroundColor: 'rgba(15,17,21,0.82)', paddingVertical: 8, paddingHorizontal: 12, zIndex: 12 }}
@@ -703,7 +707,7 @@ const MiniAppRunnerBase: React.FC<MiniAppRunnerProps> = ({ app, onClose, onLeave
         onDeny={(id) => { void denyJoin(app.id, id); }}
       />
       )}
-    </View>
+    </KeyboardSafeView>
   );
 };
 
@@ -745,6 +749,8 @@ const styles = StyleSheet.create({
     paddingBottom: 92,
     backgroundColor: '#0B0B0F',
   },
+  // Keyboard open: the nav pill is hidden, so the page may use the full height above the keyboard.
+  scrappStageKeyboard: { paddingBottom: 0 },
   navWrap: { position: 'absolute', left: 0, right: 0, bottom: 22, alignItems: 'center', zIndex: 20 },
   addonBar: {
     position: 'absolute', left: 12, right: 12, bottom: 78, zIndex: 18,

@@ -2,15 +2,14 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   Modal,
-  ScrollView,
   Switch,
   ActivityIndicator,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
+import { AppTextInput, KeyboardSafeView, KeyboardScrollView } from './KeyboardAware';
 import { ContainerTokens } from '../theme/containerTheme';
 import { addonsForScrapp, CachedAddon, ScrappRef } from '../services/addons/inject';
 import {
@@ -129,12 +128,12 @@ export const AddonSheet: React.FC<{
 
   return (
     <Modal visible animationType="slide" transparent onRequestClose={onClose}>
-      <View style={styles.backdrop}>
+      <KeyboardSafeView style={styles.backdrop}>
         <TouchableOpacity style={styles.dismiss} onPress={onClose} accessibilityLabel="Schließen" />
         <View style={[styles.sheet, { backgroundColor: tokens.card }]}>
           <View style={[styles.handle, { backgroundColor: tokens.line }]} />
           <Text style={[styles.title, { color: tokens.text }]}>Add-ons · {scrapp.name}</Text>
-          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.scroll}>
+          <KeyboardScrollView contentContainerStyle={styles.scroll}>
             <Text selectable style={[styles.notice, { color: tokens.muted, borderColor: tokens.line }]}>{ADDON_NOTICE}</Text>
             {confirming ? (
               <View style={[styles.confirm, { borderColor: tokens.lime }]}>
@@ -151,7 +150,7 @@ export const AddonSheet: React.FC<{
                 </View>
               </View>
             ) : null}
-            <TextInput
+            <AppTextInput
               style={[styles.input, { color: tokens.text, borderColor: tokens.line, backgroundColor: tokens.input }]}
               value={repo}
               onChangeText={setRepo}
@@ -177,7 +176,7 @@ export const AddonSheet: React.FC<{
                   <Text style={[styles.meta, { color: tokens.muted }]}>
                     {hasToken ? 'Ein Token ist gespeichert. Es geht nur an GitHub für Add-ons.' : 'Optional. Das Token bleibt auf diesem Gerät.'}
                   </Text>
-                  <TextInput
+                  <AppTextInput
                     style={[styles.input, { color: tokens.text, borderColor: tokens.line, backgroundColor: tokens.input }]}
                     value={token}
                     onChangeText={setToken}
@@ -263,9 +262,9 @@ export const AddonSheet: React.FC<{
             ) : null}
             {note ? <Text style={[styles.meta, { color: tokens.text }]}>{note}</Text> : null}
             {busy ? <ActivityIndicator color={tokens.lime} style={{ marginTop: 12 }} /> : null}
-          </ScrollView>
+          </KeyboardScrollView>
         </View>
-      </View>
+      </KeyboardSafeView>
     </Modal>
   );
 };
@@ -273,7 +272,7 @@ export const AddonSheet: React.FC<{
 const styles = StyleSheet.create({
   backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.45)' },
   dismiss: { flex: 1 },
-  sheet: { borderTopLeftRadius: 22, borderTopRightRadius: 22, maxHeight: '86%', paddingBottom: 24 },
+  sheet: { borderTopLeftRadius: 22, borderTopRightRadius: 22, maxHeight: '86%', paddingBottom: 24, flexShrink: 1 },
   handle: { width: 40, height: 4, borderRadius: 2, alignSelf: 'center', marginTop: 10 },
   title: { fontSize: 18, fontWeight: '700', paddingHorizontal: 16, marginTop: 12 },
   scroll: { padding: 16, paddingBottom: 28 },
